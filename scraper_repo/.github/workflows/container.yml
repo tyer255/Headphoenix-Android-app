@@ -1,0 +1,73 @@
+name: Container
+
+# Build the container image and publish it to the GitHub Container Registry
+# (ghcr.io/aliakhtari78/spotifyscraper). Runs on pushes to master and on v3*
+# tags; uses the built-in GITHUB_TOKEN, so no extra secret is required.
+
+on:
+  push:
+    branches: [master]
+    tags: ["v3*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to also tag the clean multi-arch image with, e.g. 3.6.0"
+        required: false
+        default: ""
+
+concurrency:
+  # Key on the event type as well, so a manual re-tag (workflow_dispatch) never
+  # cancels the push build (or vice versa) and leaves a stray "cancelled" check.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up QEMU (for multi-arch builds)
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags and labels
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ghcr.io/aliakhtari78/spotifyscraper
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=raw,value=${{ github.event.inputs.version }},enable=${{ github.event.inputs.version != '' }}
+            type=raw,value=v${{ github.event.inputs.version }},enable=${{ github.event.inputs.version != '' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Skip the provenance/SBOM attestation manifest, which otherwise shows
+          # up on the GitHub Packages page as a stray "unknown/unknown" platform.
+          provenance: false
+          sbom: false

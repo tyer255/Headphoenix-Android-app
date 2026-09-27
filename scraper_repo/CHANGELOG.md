@@ -1,0 +1,882 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [3.9.2] - 2026-06-26
+
+### Added
+- **`--no-hint` CLI flag** to suppress the one-time star hint for a single
+  invocation (mirrors `SPOTIFYSCRAPER_NO_HINT=1`). Thanks @knightxiaoxi (#147).
+
+## [3.9.1] - 2026-06-20
+
+### Fixed
+- Correct the MCP registry namespace casing to `io.github.AliAkhtari78/…` (in
+  `server.json`, the README `mcp-name` marker, and the Dockerfile label) so the
+  official-registry publish succeeds — the GitHub OIDC namespace is
+  case-sensitive to the canonical username.
+
+## [3.9.0] - 2026-06-20
+
+### Added
+- **Official MCP Registry support.** The `spotifyscraper-mcp` server is now
+  published to the Model Context Protocol registry
+  (`registry.modelcontextprotocol.io`) on each release tag, so AI clients and
+  directories (Glama, mcp.so, PulseMCP, Smithery) can discover it. Adds a root
+  `server.json`, an `mcp-name` marker, a Dockerfile ownership label, and a
+  failure-isolated `publish-mcp` workflow authenticated via GitHub OIDC — no
+  stored secret.
+- **One-time CLI star hint.** After a successful interactive command the CLI
+  prints a single, suppressible reminder to **stderr** pointing at the repo. It
+  never appears in piped/JSON/`--output` results, shows only on a TTY, and only
+  once; silence it permanently with `SPOTIFYSCRAPER_NO_HINT=1`.
+
+### Changed
+- **README** gains an honest "SpotifyScraper vs. spotipy" comparison table, a
+  monthly-downloads badge, a star-history chart, and a note for developers
+  migrating off Spotify's deprecated official `audio-features` /
+  `recommendations` / `related-artists` endpoints. The docs landing page gains a
+  star call-to-action. No library API changed.
+
+## [3.8.0] - 2026-06-20
+
+### Changed
+- **CI / supply chain.** Bumped every GitHub Actions dependency to its current
+  major, all SHA-pinned: `actions/checkout` v7, `astral-sh/setup-uv` v8,
+  `github/codeql-action` v4, the `docker/*` build actions (setup-qemu, setup-buildx,
+  login, metadata, build-push), and `anthropics/claude-code-action`. (#141)
+- **Dev toolchain.** Refreshed the locked dev environment and pre-commit hooks —
+  `ruff` 0.9 → 0.15 (hook), `pytest` 9.1, `mcp` 1.28, and lockfile point releases.
+- **Docs & packaging.** Added author/site backlinks: a website link in the docs
+  footer (shown on every page) and "Live Demo" / "Author" entries in the PyPI sidebar.
+
+### Internal
+- Corrected the `httpx` `<1.0` cap rationale: 1.0 is not yet released (only
+  `1.0.dev*`), and the public-API change the comment cited actually shipped in 0.28
+  (already absorbed). The cap and runtime behavior are unchanged.
+
+This is a maintenance release — no library getter, model, CLI, or MCP signature changed.
+
+## [3.7.0] - 2026-06-16
+
+### Added
+- **MCP batch tools.** The `spotifyscraper-mcp` server now exposes the plural
+  getters as tools — `get_tracks` / `get_albums` / `get_artists` / `get_playlists`
+  / `get_episodes` / `get_shows` — fetching many IDs in one call. Each returns an
+  ordered `{value, ok, result, error}` item per input (mirroring `BatchItem`), so a
+  single bad or missing ID never sinks the batch. `get_playlists` / `get_shows`
+  accept `max_tracks` / `max_episodes`.
+- **MCP `get_track_visuals` tool.** Returns a track with its cover `colors` and
+  `canvas` in one round-trip — a convenience for visual, voice-driven front-ends.
+  `track` and `colors` are always present (anonymous); `canvas` is best-effort and
+  `null` without a `SPOTIFY_SP_DC` cookie or when the track has none.
+
+No library getter, model, or CLI signature changed; this release only widens the
+MCP tool surface over capabilities the library already shipped.
+
+## [3.6.1] - 2026-06-16
+
+### Fixed
+- **Documentation examples.** Standardized the canonical example IDs on Rick
+  Astley's "Whenever You Need Somebody" album (`6N9PS4QXF1D0OWPk0Sxtb4`) — the
+  previous album example was region-restricted (so it appeared "missing" in some
+  markets) and an example podcast episode had been removed (HTTP 403). No library
+  code changed. Also documented the multi-architecture (amd64 + arm64) container
+  image.
+
+## [3.6.0] - 2026-06-16
+
+### Added
+- **Cover-art colors.** `client.get_colors(source)` returns a typed `Colors`
+  (`raw`/`dark`/`light` `#RRGGBB` hex + `is_fallback`) for UI theming. Anonymous
+  and tier-1-only. `source` may be a Spotify image URL, a `spotify:image:` uri, or
+  any fetched entity that has `images` (the first image is used). CLI: `colors`.
+- **Canvas.** `client.get_canvas(track)` returns a `Canvas` (a short, silent,
+  **non-DRM** looping cover-video MP4 on `canvaz.scdn.co`) or `None` when the track
+  has none. `client.download_canvas(track_or_canvas, dest)` saves the MP4. Canvas
+  is cookie-authenticated (build with `cookies=`), exactly like lyrics. CLI:
+  `canvas`.
+- **Charts.** `client.list_charts()` enumerates the built-in editorial charts and
+  `client.get_chart(key)` (e.g. `"top-50-global"`, `"todays-top-hits"`) fetches one
+  as a `Playlist`. Charts are ordinary editorial playlists, so no new persisted
+  query is involved. CLI: `charts`.
+- **Related artists.** `client.get_related_artists(artist)` returns Spotify's
+  "fans also like" artists (with images). Anonymous. CLI: `related`.
+- **Full discography.** `client.get_discography(artist, max_releases=None)`
+  paginates every release (albums, singles, compilations) as `AlbumRef` objects.
+  Anonymous. CLI: `discography`.
+- **Recommendations.** `client.get_similar_albums(track, limit=...)` returns
+  albums recommended from a track. Anonymous. CLI: `similar`.
+- **Public user profiles.** `client.get_user(user_id)` returns a `UserProfile`
+  (name, follower/following counts, public playlists, recently-played artists).
+  Cookie-authenticated (the anonymous token is refused). CLI: `user`.
+- **Track credits.** `client.get_credits(track)` returns a `Credits` (performers,
+  writers, producers — each with their sub-roles). Cookie-authenticated. CLI:
+  `credits`.
+- **Artist concerts.** `client.get_artist_events(artist)` returns upcoming live
+  events (`Concert`: title, start date, city, line-up). Anonymous; the set can
+  vary by region. CLI: `events`.
+- **MCP server.** A Model Context Protocol server (`spotifyscraper-mcp`, behind
+  the new `mcp` extra) exposes every getter as a tool with structured JSON output,
+  the six entity types as `spotify://…` resources, curated prompts, a cover-art
+  image tool, and stdio + streamable-HTTP transports. Authenticated tools require
+  the `SPOTIFY_SP_DC` environment variable. Install with
+  `pip install 'spotifyscraper[mcp]'`.
+- **Container image.** Published to `ghcr.io/aliakhtari78/spotifyscraper`; by
+  default it serves the MCP server over streamable-HTTP
+  (`docker run -p 8000:8000 ghcr.io/aliakhtari78/spotifyscraper`), or runs the CLI
+  on demand. Built and pushed from CI with the repo's `GITHUB_TOKEN`.
+
+## [3.5.0] - 2026-06-15
+
+### Added
+- **Optional response cache.** Opt in with
+  `SpotifyClient(cache=CacheConfig(store=FileCache()))` for a persistent,
+  off-by-default HTTP cache at the transport seam (composes with rate limiting,
+  retries, and `locale`). Only token-free pathfinder `GET`s that return `200` are
+  cached; the token-bearing embed pages, the token endpoints, and the
+  cookie-authenticated lyrics/transcript host are never cached, so no credential
+  is written to disk. Default TTL is 24h; the stdlib `FileCache` needs no new
+  dependency and the `DiskCache` backend is pluggable.
+- **Batch helpers.** Plural `get_tracks`, `get_albums`, `get_artists`,
+  `get_playlists`, `get_episodes`, and `get_shows` fetch many inputs and return
+  one ordered, index-aligned `BatchItem` per input. A dead or malformed input
+  never aborts the batch — its captured error lands on that item's `error`
+  (`item.ok` / `item.result` / `item.unwrap()`). The async client runs them
+  concurrently, bounded by the client's `max_concurrency` (default 5) with the
+  per-host rate limiter still governing pacing; the sync helpers run
+  sequentially.
+
+## [3.4.0] - 2026-06-15
+
+### Added
+- **Search.** `client.search(query, types=..., limit=...)` runs one anonymous,
+  aggregate query across tracks, albums, artists, playlists, shows, and episodes,
+  returning a typed `SearchResults` (one tuple per type; lightweight `AlbumRef`/
+  `ShowRef` for albums/shows). `total` is Spotify's track-match count (`None`
+  when tracks aren't requested). A no-match query returns empty results, not an
+  error; an unrecognized type raises `URLError` before any request.
+- **Display-language localization.** An optional `locale` (a BCP-47 language tag
+  such as `"de"` or `"ja-JP"`) on the constructor and on every entity getter and
+  `search()` sets the `Accept-Language` header so Spotify returns localized
+  display names (per-call overrides the per-client default; invalid tags raise
+  `URLError` before any request). `locale` is a *language* preference, not a
+  country/market code — a bare `"US"` is ignored — and does not filter regional
+  availability; anonymous market filtering is intentionally not offered (the
+  pathfinder `market` variable is inert and country is IP-bound).
+
+## [3.3.0] - 2026-06-15
+
+### Added
+- **Podcast transcripts.** `client.get_transcript(value)` returns a `Transcript`
+  (a tuple of millisecond-offset `TranscriptLine`s) for a podcast episode, and a
+  `spotifyscraper transcript` CLI command emits it as JSON. Transcripts reuse the
+  same `sp_dc` cookie and token handshake as lyrics — one exchange serves both.
+  An episode without a transcript (a 404, or a 200 with no spoken text) raises
+  `NotFoundError`; an unexpected payload shape raises `ParsingError`.
+- **Browser-assisted login & session persistence.** `client.login()` opens a
+  real (headed) browser, captures the `sp_dc` cookie after you sign in by hand
+  (no password is ever collected or stored), and persists it — with the cookie's
+  real expiry — to an owner-only (0600) file or, with `store="keyring"` and the
+  new `keyring` extra, the OS keyring. `SpotifyClient.from_saved_session()`
+  reconnects headlessly; `logout()` revokes the local copy. A `spotifyscraper
+  login` / `logout` CLI mirrors it. The cookie never appears in a `repr`, log, or
+  error message.
+- **Account-awareness & self-aware sessions.** `client.get_account()` returns the
+  logged-in account's product state (`product`, `country`, locale) and
+  `client.is_premium()` is the convenience check. `login(reuse=True)` (the
+  default) reuses a valid saved session and skips the browser; `session_info()`
+  (and the `spotifyscraper session` command) report a saved session's status —
+  `exists`, `valid`, expiry/days-remaining — **without exposing the cookie**.
+
+## [3.2.0] - 2026-06-13
+
+### Added
+- **Lyrics.** `client.get_lyrics(track)` returns time-synced (or unsynced)
+  lyrics, and a `spotifyscraper lyrics` CLI command emits them as JSON. Lyrics
+  require a user `sp_dc` cookie (`SpotifyClient(cookies=...)` or `--cookies` /
+  the `SPOTIFY_SP_DC` env var); the library performs Spotify's rotating-TOTP
+  `/api/token` handshake internally. Cookies and tokens stay local and are
+  never logged. The `Lyrics` / `LyricsLine` models are now populated.
+
+## [3.1.0] - 2026-06-13
+
+### Added
+- **Command-line interface.** Install with `pip install "spotifyscraper[cli]"`
+  for a `spotifyscraper` command with one subcommand per entity (`track`,
+  `album`, `artist`, `playlist`, `episode`, `show`) plus `download cover` and
+  `download preview`. Commands emit JSON (`--pretty`, `-o FILE`), accept
+  client-tuning options (`--proxy`, `--timeout`, `--rate-limit`,
+  `--max-tracks`/`--max-episodes`), and map library errors to clean messages
+  and exit codes.
+
+## [3.0.0] - 2026-06-13
+
+A complete clean-room rewrite. v3 replaces fragile HTML scraping with a
+token-based JSON strategy, returns typed immutable models instead of dicts, and
+raises typed exceptions instead of mixing errors into results.
+
+### Added
+- `SpotifyClient` and `AsyncSpotifyClient` — sync and async facades over one
+  sans-io core, both context managers.
+- `get_track`, `get_album`, `get_artist`, `get_playlist`, `get_episode`, and
+  `get_show`, each accepting a URL, URI, or bare ID and returning a typed model.
+- Automatic pagination: full album track lists, bounded playlist tracks
+  (`max_tracks`), and full show episode listings (`max_episodes`).
+- Typed, frozen dataclass models (`Track`, `Album`, `Artist`, `Playlist`,
+  `Episode`, `Show`, …) with JSON-safe `to_dict()` / `from_dict()`.
+- A two-tier extraction ladder: Spotify's pathfinder GraphQL API (rich data)
+  with automatic degradation to the public embed page (core fields).
+- Media downloads: `download_cover` and `download_preview`, with optional ID3
+  cover embedding via `mutagen` (the `media` extra).
+- Anti-ban resilience: per-host rate limiting (`RateLimit`, `host_rate_limits`),
+  retries with exponential backoff (`RetryPolicy`), transient-403 retry,
+  user-agent rotation, and proxy support.
+- A Playwright browser transport as an optional drop-in fallback (the `browser`
+  extra), injectable via `transport=`.
+- A typed exception hierarchy rooted at `SpotifyScraperError`.
+- A MkDocs Material documentation site with a full v2→v3 migration guide, and a
+  daily CI canary that detects Spotify-side breakage.
+
+### Changed
+- **BREAKING:** every `get_*_info(url)` method is replaced by `get_*(value)`
+  returning a typed model (call `.to_dict()` for the old dict shape).
+- **BREAKING:** failures now raise exceptions instead of returning error strings
+  or dicts.
+- **BREAKING:** the minimum supported Python version is now 3.10.
+- The core depends only on `httpx`; everything else is an optional extra.
+
+### Removed
+- **BREAKING:** `get_all_info` — call the specific `get_*` method instead.
+- The Selenium browser backend (replaced by the Playwright transport extra).
+
+### Not yet included (returning in v3.1)
+- Lyrics extraction and the command-line interface are not part of v3.0; both
+  ship in v3.1 (lyrics require an authenticated cookie + a token handshake). The
+  `Lyrics` / `LyricsLine` model types are present but not yet populated.
+
+### Migration
+See the [migration guide](https://spotifyscraper.readthedocs.io/en/latest/migration/)
+for a method-by-method map from v2.
+
+## [2.1.5] - 2025-06-12
+
+### Fixed
+- Fixed critical NoneType error in JSON parser when handling tracks with null values (Issue #71)
+- Added comprehensive null checks throughout track data extraction to prevent "argument of type 'NoneType' is not iterable" errors
+- Improved error messages to clearly indicate when track data is missing or malformed
+
+### Changed
+- Enhanced JSON parser robustness with defensive programming for all dictionary access operations
+- Added specific type checking to ensure track_data is a dictionary before processing
+
+### Added
+- Comprehensive test suite for NoneType handling in JSON parser
+- Better error reporting for debugging track extraction issues
+
+### Technical Details
+- Fixed issue where tracks with null artist, album, or other metadata fields would crash the parser
+- All `in` operator checks now verify the container is not None before checking membership
+- Maintains full backward compatibility while improving reliability
+
+## [2.1.4] - 2025-06-09
+
+### Added
+- Firefox browser support for Selenium backend with `browser_name` parameter
+- Automatic webdriver management via `webdriver-manager` package (optional dependency)
+- Enhanced metadata extraction: `track_number`, `disc_number`, and `popularity` fields in JSON parser
+- Comprehensive webdriver-manager documentation and examples
+- `use_webdriver_manager` parameter to SpotifyClient for automatic driver downloads
+
+### Changed
+- SeleniumBrowser now supports both Chrome (default) and Firefox browsers
+- Improved browser initialization with better error messages
+- Enhanced JSON parser to extract additional track metadata when available
+
+### Fixed
+- Track number extraction now properly works for tracks in album context
+- Improved error handling for missing webdriver-manager dependency
+
+### Technical Details
+- Added `webdriver-manager>=4.0.0` to optional selenium dependencies
+- JSON parser enhanced to handle camelCase and snake_case field variants
+- All code changes maintain backward compatibility
+
+## [2.1.3] - 2025-06-07
+
+### Fixed
+- URLError now properly raises exceptions for invalid URLs instead of returning error dictionaries
+- Fixed import errors (DataExtractionError → ExtractionError)
+- Fixed syntax errors in documentation examples
+- Fixed broken code examples in quickstart.md and advanced.md
+
+### Changed
+- Comprehensive documentation update to reflect actual available fields
+- Updated all examples to remove references to unavailable fields (popularity, followers, genres)
+- Clarified that lyrics require OAuth authentication, not just cookies
+- Unified examples across README, Wiki, and MkDocs documentation
+
+### Added
+- AVAILABLE_FIELDS.md - Complete reference of fields available via web scraping
+- UNIFIED_EXAMPLES.md - Consistent examples across all documentation
+- Comprehensive test suite for all documentation examples
+- Clear distinction between web scraping capabilities and API-only features
+
+### Documentation
+- Updated README with "Important Notes" section about field availability
+- Fixed all code examples to use only available fields
+- Added migration notes for users expecting API-like functionality
+- Improved error handling documentation
+
+## [2.1.2] - 2025-06-06
+
+### Fixed
+- Fixed lyrics extraction to properly handle OAuth authentication requirement
+- Updated all documentation to clarify that lyrics require OAuth Bearer tokens, not cookie authentication
+- Added proper warning messages when attempting to access lyrics without OAuth tokens
+
+### Added
+- Added new `LyricsExtractor` class with proper OAuth token checking
+- Added comprehensive documentation about lyrics API limitations
+
+### Changed
+- Updated `get_track_lyrics()` and `get_track_info_with_lyrics()` to correctly return None with appropriate warnings
+- Modified all documentation examples to reflect that lyrics are not accessible via cookie authentication
+- Updated FAQ, troubleshooting guide, and API documentation with OAuth requirements
+
+### Documentation
+- Unified all documentation sources (README.md, GitHub Pages, ReadTheDocs) with consistent messaging about lyrics limitations
+- Removed misleading examples suggesting cookie authentication works for lyrics
+- Added clear explanations about Spotify's OAuth requirement for lyrics API
+
+## [2.0.22] - 2025-01-06
+
+### Fixed
+- Fixed all documentation examples to use safe field access patterns with `.get()` method
+- Fixed KeyError issues when fields are missing from API responses
+- Fixed nested field access patterns (e.g., `track['artists'][0]['name']`) to handle missing data
+- Fixed error handling imports in documentation (`from spotify_scraper import` instead of `from spotify_scraper.exceptions import`)
+- Updated over 40 documentation files to prevent KeyError exceptions
+
+### Added
+- Added `docs/examples/corrected_examples.md` with working code samples showing exactly which fields are available
+- Added safe patterns for accessing optional fields throughout documentation
+
+### Changed
+- All field access now uses `.get()` method with appropriate defaults:
+  - `track['name']` → `track.get('name', 'Unknown')`
+  - `album['release_date']` → `album.get('release_date', 'N/A')`
+  - `artist['genres']` → `artist.get('genres', [])`
+  - `playlist['description']` → `playlist.get('description', '')`
+- Complex nested access patterns now check for existence before accessing
+
+### Documentation
+- Updated all code examples in README, Wiki, and documentation to use safe field access
+- Fixed the specific example that was causing `KeyError: 'release_date'` as reported by user
+- Ensured consistency across all documentation files
+
+## [2.0.21] - 2025-05-28
+
+### Fixed
+- Fixed all documentation examples to use only available fields based on comprehensive testing
+- Fixed album examples incorrectly using `album['release_date']` which is not always available
+- Fixed album examples incorrectly using `album['label']` which is not available via web scraping
+- Fixed artist examples incorrectly using `artist['genres']`, `artist['followers']`, and `artist['popularity']`
+- Fixed playlist examples incorrectly using `playlist['owner']['display_name']` (should be `playlist['owner']['name']`)
+- Fixed playlist examples using `playlist['total_tracks']` instead of correct `playlist['track_count']`
+- Updated all documentation to handle missing fields gracefully with `.get()` method
+
+### Changed
+- Album tracks are now accessed as `album['tracks']` (list) instead of `album['tracks']['items']`
+- Playlist tracks are now accessed as `playlist['tracks']` (list) instead of `playlist['tracks']['items']`
+- All examples now use safe access patterns for fields that may not be available
+- Improved error handling in documentation examples
+
+### Documentation
+- Comprehensively tested all extractors to identify exact available fields
+- Updated README, Wiki, and all documentation files with corrected field usage
+- Added notes explaining which fields are not available via web scraping
+- Fixed over 10 documentation files with incorrect field references
+
+## [2.0.20] - 2025-05-28
+
+### Fixed
+- Fixed documentation incorrectly listing 'popularity' as an available field for tracks
+- Updated all examples to remove references to track['popularity'] field
+- Clarified that popularity data is only available via Spotify's official API, not web scraping
+
+### Changed
+- Updated README to correctly list available track fields
+- Modified example code to use proper field names (is_explicit instead of explicit)
+- Added notes in documentation about web scraping limitations vs official API
+
+### Documentation
+- Corrected track metadata field list in README
+- Updated Wiki examples to remove popularity field references
+- Added clarification about available fields when using web scraping
+
+## [2.0.19] - 2025-05-28
+
+### Fixed
+- Fixed None handling in CLI utilities for duration_ms values
+- Fixed bulk operations `extract_urls_from_text` to handle None input gracefully
+- Fixed playlist formatter to safely handle None tracks data
+
+### Changed
+- Aligned documentation across README, GitHub Wiki, and PyPI with consistent tone and structure
+- Updated all Wiki pages with unified formatting and improved examples
+- Enhanced API reference documentation with comprehensive examples
+- Improved FAQ section with common issues and solutions
+
+### Documentation
+- Created unified documentation templates for better consistency
+- Added more real-world examples in the Examples section
+- Improved Quick Start guide with clearer instructions
+- Enhanced troubleshooting information in FAQ
+
+## [2.0.18] - 2025-05-28
+
+### Added
+- Added `process_urls()` method to `SpotifyBulkOperations` class for processing multiple URLs
+- Added `export_to_json()` and `export_to_csv()` methods to `SpotifyBulkOperations`
+- Added `batch_download()` method for efficient bulk media downloads
+- Added comprehensive bulk operations documentation
+- Added unit tests for all new bulk operations functionality
+
+### Fixed
+- Fixed bare except clause in `SpotifyBulkOperations` (now properly catches and logs exceptions)
+- Fixed multiple potential None reference errors in CLI utilities
+- Fixed None reference errors in JSON parser when handling missing URI fields
+- Improved error handling for missing nested dictionary values
+- Added proper type checking before accessing dictionary methods
+
+### Changed
+- Improved error handling throughout the codebase with proper exception logging
+- Enhanced input validation for safer dictionary access patterns
+- Updated documentation with correct usage examples for bulk operations
+
+### Security
+- Added safe handling of potentially None values to prevent crashes
+- Improved URI parsing to handle edge cases safely
+
+## [2.0.7] - 2025-05-26
+
+### Fixed
+- Fixed missing `album` field in `get_track_info()` response
+- Added JSON-LD fallback extraction for album data when missing from primary track data
+- Improved track data extraction to be compatible with Spotify Web API structure
+
+## [2.0.6] - 2025-05-25
+
+### Fixed
+- Fixed automated PyPI deployment by using --no-isolation build to prevent cached metadata
+- Added pip cache purge to ensure clean builds
+- Fixed Release workflow changelog generation to handle missing previous tags
+- Fixed version reference in create-github-release job
+- Improved build process to clean all caches and artifacts
+
+### Changed
+- Updated all workflows to use consistent clean build process
+- Enhanced error handling in changelog generation
+
+## [2.0.5] - 2025-05-25
+
+### Fixed
+- Fixed Release workflow startup failure by removing invalid secret conditionals
+- Changed Test PyPI steps to use continue-on-error with runtime checks
+- Ensured workflow runs successfully even when TEST_PYPI_TOKEN is not configured
+
+## [2.0.4] - 2025-05-25
+
+### Fixed
+- Fixed GitHub Actions workflows to ensure clean builds
+- Added build artifact cleanup step to Release workflow
+- Made Test PyPI upload optional when TEST_PYPI_TOKEN is not available
+- Fixed PyPI token reference from PYPI_TOKEN to PYPI_API_TOKEN in Release workflow
+- Ensured all workflows use consistent build process
+
+## [2.0.3] - 2025-05-25
+
+### Fixed
+- Fixed license field format in pyproject.toml to comply with PEP 621 specification
+- License field now uses {text = "MIT"} format instead of plain string
+- Resolved CI/CD pipeline failures on all platforms (Windows, macOS, Linux)
+- Fixed "configuration error: project.license must be valid exactly by one definition" error
+
+## [2.0.2] - 2025-05-25
+
+### Fixed
+- Fixed PyPI deployment metadata issues by cleaning build artifacts before packaging
+- Removed deprecated `license-file` field completely from package metadata
+- Enhanced GitHub Actions workflow to ensure clean builds
+
+## [2.0.1] - 2025-05-25
+
+### Fixed
+- Fixed KeyError when accessing 'total_tracks' in album data
+- Ensured 'total_tracks' field is always present in AlbumData (defaults to 0 if tracks unavailable)
+- Improved album data extraction robustness
+
+## [2.0.0] - 2025-05-23
+
+### 🎆 Complete Rewrite - Modern Architecture
+
+**SpotifyScraper v2.0** is a complete rewrite from the ground up, modernizing every aspect of the library. This release represents months of development effort to create a more reliable, performant, and developer-friendly tool for extracting Spotify data.
+
+#### Highlights
+- 🏗️ **New Architecture**: Modular design with clear separation of concerns
+- 🔒 **Type Safety**: Full TypeScript-style type hints throughout the codebase
+- ⚡ **Performance**: 3x faster extraction with connection pooling and caching
+- 🎨 **Media Support**: Built-in high-quality preview and cover art downloading
+- 🤖 **Smart Extraction**: Handles Spotify's modern React-based architecture
+- 🔄 **Backward Compatible**: Legacy API available for smooth migration
+
+### ✨ Added
+
+#### Core Features
+- **SpotifyClient**: New high-level client interface for all operations
+- **Extractor System**: Specialized extractors for tracks, albums, artists, and playlists
+- **JSON Parser**: Robust parser for Spotify's `__NEXT_DATA__` React structure
+- **Media Downloaders**: 
+  - `AudioDownloader`: MP3 preview downloads with ID3 tag embedding
+  - `ImageDownloader`: Cover art in multiple resolutions (300x300, 640x640, original)
+- **CLI Tool**: Full-featured command-line interface for all operations
+- **Authentication**: Support for auth tokens and cookie-based authentication
+- **Configuration Manager**: YAML/JSON config files and environment variables
+- **Type System**: Complete TypedDict definitions for all data structures
+
+#### Browser Backends
+- **RequestsBrowser**: Lightweight, fast browser using requests library
+- **SeleniumBrowser**: Full browser automation for complex scenarios
+- **BrowserFactory**: Automatic selection based on requirements
+
+#### Developer Experience
+- **Type Hints**: 100% type coverage with mypy strict mode
+- **Rich Exceptions**: Detailed error messages with recovery suggestions
+- **Logging**: Structured logging with configurable levels and outputs
+- **Documentation**: Comprehensive docstrings and usage examples
+- **Testing**: Extensive test suite with 90%+ code coverage
+
+#### Advanced Features
+- **Proxy Support**: HTTP/HTTPS/SOCKS proxy configuration
+- **Rate Limiting**: Intelligent rate limit handling with backoff
+- **Retry Logic**: Configurable retry strategies for resilience
+- **Cache System**: Optional caching for improved performance
+- **Async Support**: Optional async/await for concurrent operations
+- **Custom Headers**: Support for custom HTTP headers
+- **Session Persistence**: Save and restore authentication sessions
+
+### 🔄 Changed
+
+#### API Changes
+- **Import Structure**: Main classes now in `spotify_scraper` namespace
+- **Method Names**: Consistent naming convention across all extractors
+- **Return Types**: All methods return TypedDict structures
+- **Parameter Names**: More descriptive parameter names throughout
+- **Error Handling**: New exception hierarchy with specific error types
+
+#### Dependency Updates
+- **lxml**: 4.5.0 → 5.4.0 (Python 3.12 compatibility, security fixes)
+- **beautifulsoup4**: 4.9.0 → 4.13.0 (performance improvements)
+- **requests**: 2.23.0 → 2.32.3 (security patches, HTTP/2 support)
+- **urllib3**: 1.25.9 → 2.4.0 (modern TLS, connection pooling)
+- **selenium**: New optional dependency 4.30.0+ (WebDriver BiDi support)
+- **PyYAML**: 5.3.1 → 6.0.1 (CVE fixes, Python 3.12 support)
+- **mutagen**: New dependency for ID3 tag support
+- **Pillow**: New optional dependency for image processing
+
+### ⚒️ Removed
+
+- **Legacy Code**: Removed deprecated v1.x implementation
+- **Old Dependencies**: Removed outdated and insecure packages
+- **Unused Features**: Removed experimental features that weren't stable
+- **Python 2.7 Support**: Dropped support for EOL Python versions
+- **Python 3.6-3.7**: Minimum version now Python 3.8
+
+### 🔄 Migration Guide
+
+#### Quick Migration
+
+The fastest way to migrate is to update your imports:
+
+```python
+# Old (v1.x)
+from SpotifyScraper.scraper import Scraper, Request
+
+# New (v2.0) - Compatibility mode
+from spotify_scraper.compat import Scraper, Request
+```
+
+#### Recommended Migration
+
+For the best experience, migrate to the new API:
+
+```python
+# Old way (v1.x)
+from SpotifyScraper.scraper import Scraper, Request
+
+request = Request().request()
+scraper = Scraper(session=request)
+
+# Get track info
+track_info = scraper.get_track_url_info(
+    url='https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6'
+)
+
+# Download preview
+scraper.download_track(track_id='6rqhFgbbKwnb9MLmUQDhG6')
+```
+
+```python
+# New way (v2.0)
+from spotify_scraper import SpotifyClient
+
+client = SpotifyClient()
+
+# Get track info - cleaner API
+track = client.get_track('https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6')
+
+# Download preview - more options
+path = client.download_preview(
+    track_id='6rqhFgbbKwnb9MLmUQDhG6',
+    filename='my_song.mp3',
+    with_cover=True
+)
+```
+
+#### Feature Mapping
+
+| v1.x Method | v2.0 Equivalent |
+|-------------|----------------|
+| `get_track_url_info()` | `get_track()` |
+| `get_track_id_info()` | `get_track_by_id()` |
+| `get_album_url_info()` | `get_album()` |
+| `get_album_id_info()` | `get_album_by_id()` |
+| `get_artist_url_info()` | `get_artist()` |
+| `get_playlist_url_info()` | `get_playlist()` |
+| `download_track()` | `download_preview()` |
+| `download_cover_image()` | `download_cover()` |
+
+### 💥 Breaking Changes
+
+#### Python Version
+- **Minimum Version**: Python 3.8+ required (was 3.6+)
+- **Recommended**: Python 3.10+ for best performance
+
+#### Import Changes
+```python
+# Old
+from SpotifyScraper.scraper import Scraper
+from SpotifyScraper.request import Request
+
+# New
+from spotify_scraper import SpotifyClient
+# or for compatibility
+from spotify_scraper.compat import Scraper, Request
+```
+
+#### API Changes
+- Method signatures have been standardized
+- All methods now return TypedDict objects instead of raw dicts
+- Removed several deprecated methods
+- Configuration is now handled through a dedicated Config class
+
+#### Behavior Changes
+- Downloads now include metadata by default
+- File naming conventions have changed
+- Error messages are more detailed
+- Logging is now structured JSON by default
+
+### 🐛 Fixed
+
+#### Compatibility Fixes
+- **Python 3.12**: Resolved lxml compilation errors
+- **Windows**: Fixed path handling for Windows systems
+- **macOS**: Fixed SSL certificate verification issues
+- **Linux**: Improved Chrome/Chromium detection
+
+#### Bug Fixes
+- **Memory Leaks**: Proper cleanup of browser sessions
+- **Unicode**: Correct handling of special characters in titles
+- **Rate Limiting**: Exponential backoff for 429 errors
+- **Connection Pooling**: Fixed connection exhaustion issues
+- **Proxy Support**: Fixed SOCKS proxy authentication
+- **Cookie Handling**: Improved cookie jar persistence
+- **JSON Parsing**: Handle malformed JSON responses gracefully
+- **File Downloads**: Resume partial downloads correctly
+
+#### Security Fixes
+- **CVE-2023-45803**: urllib3 security vulnerability
+- **CVE-2023-32681**: Requests security vulnerability  
+- **CVE-2022-48174**: PyYAML arbitrary code execution
+- **Input Validation**: Prevent path traversal attacks
+- **SSL/TLS**: Enforce minimum TLS 1.2
+
+### 📚 Documentation
+
+- **README**: Complete rewrite with comprehensive examples
+- **API Reference**: Full API documentation with type information
+- **Tutorials**: Step-by-step guides for common use cases
+- **Migration Guide**: Detailed instructions for upgrading from v1.x
+- **Contributing**: Comprehensive contribution guidelines
+- **Architecture**: Technical documentation of the system design
+- **Examples**: 15+ example scripts for various scenarios
+
+### 🎨 Developer Experience
+
+- **IDE Support**: Full IntelliSense/autocomplete with type hints
+- **Error Messages**: Clear, actionable error messages
+- **Debugging**: Comprehensive logging with context
+- **Testing**: Easy to mock and test with included fixtures
+- **Examples**: Copy-paste ready code examples
+- **CLI**: Intuitive command-line interface
+
+### 🚀 Performance Improvements
+
+- **3x Faster**: Extraction speed improved through optimized parsing
+- **50% Less Memory**: Reduced memory usage with streaming downloads
+- **Connection Pooling**: Reuse HTTP connections for better performance
+- **Parallel Processing**: Support for concurrent operations
+- **Smart Caching**: Cache frequently accessed data
+- **Lazy Loading**: Load data only when needed
+
+### 🎉 Thank You!
+
+This release wouldn't have been possible without the amazing community. Special thanks to:
+- All contributors who submitted PRs and issues
+- Early adopters who tested pre-release versions
+- Users who provided feedback and suggestions
+
+We're excited to see what you build with SpotifyScraper v2.0!
+
+## [1.0.5] - 2021-03-15
+
+### Fixed
+- Updated user agents for better compatibility
+- Fixed playlist extraction for large playlists
+- Improved error handling for network timeouts
+
+### Security
+- Updated requests to 2.25.1 (security patches)
+
+## [1.0.4] - 2020-11-20
+
+### Added
+- Support for episode and show URLs
+- Retry logic for failed requests
+
+### Fixed
+- Unicode handling in track names
+- Memory leak in long-running sessions
+
+## [1.0.3] - 2020-08-15
+
+### Added
+- Proxy support via environment variables
+- Custom user agent configuration
+
+### Fixed
+- Album art extraction for certain albums
+- Timeout handling improvements
+
+## [1.0.2] - 2020-05-10
+
+### Fixed
+- Compatibility with Spotify's updated HTML structure
+- Better handling of unavailable tracks
+
+## [1.0.1] - 2020-02-20
+
+### Added
+- Progress callbacks for downloads
+- File size validation
+
+### Fixed
+- Windows path handling issues
+- Download resume functionality
+
+## [1.0.0] - 2020-01-15
+
+### Added
+- Initial release of SpotifyScraper
+- Basic track, album, artist, and playlist extraction
+- Support for downloading preview MP3s
+- Simple web scraping with requests and BeautifulSoup
+- Command-line interface
+- Basic documentation
+
+---
+
+## Upgrading
+
+### From 1.x to 2.0
+
+#### Step 1: Check Python Version
+```bash
+python --version  # Must be 3.8 or higher
+```
+
+#### Step 2: Update Package
+```bash
+# Uninstall old version
+pip uninstall SpotifyScraper
+
+# Install new version
+pip install spotifyscraper>=2.0.0
+```
+
+#### Step 3: Update Code
+
+Option A - Quick fix (use compatibility layer):
+```python
+# Change this line:
+from SpotifyScraper.scraper import Scraper, Request
+
+# To this:
+from spotify_scraper.compat import Scraper, Request
+```
+
+Option B - Full migration (recommended):
+```python
+# Old
+from SpotifyScraper.scraper import Scraper, Request
+req = Request().request()
+scraper = Scraper(session=req)
+track = scraper.get_track_url_info(url="...")
+
+# New 
+from spotify_scraper import SpotifyClient
+client = SpotifyClient()
+track = client.get_track("...")
+```
+
+#### Step 4: Test
+```bash
+# Run your tests
+pytest
+
+# Or test manually
+python -c "from spotify_scraper import SpotifyClient; print('Import successful!')"
+```
+
+### Need Help?
+
+- 📖 [Migration Guide](https://spotifyscraper.readthedocs.io/en/latest/migration/)
+- 💬 [GitHub Discussions](https://github.com/AliAkhtari78/SpotifyScraper/discussions)
+- 🐛 [Report Issues](https://github.com/AliAkhtari78/SpotifyScraper/issues)
+
+---
+
+[Unreleased]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v1.0.5...v2.0.0
+[1.0.5]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v1.0.4...v1.0.5
+[1.0.4]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/AliAkhtari78/SpotifyScraper/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/AliAkhtari78/SpotifyScraper/releases/tag/v1.0.0

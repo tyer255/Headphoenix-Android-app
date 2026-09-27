@@ -1,0 +1,317 @@
+{
+  "assetPrefix": "https://embed-cdn.spotifycdn.com",
+  "buildId": "44e35711-ec29-4ab1-8153-65ee67c494c2",
+  "gssp": true,
+  "isExperimentalCompile": false,
+  "isFallback": false,
+  "page": "/album/[id]",
+  "props": {
+    "__N_SSP": true,
+    "pageProps": {
+      "_sentryBaggage": "REDACTED",
+      "_sentryTraceData": "REDACTED",
+      "config": {
+        "clientId": "REDACTED",
+        "correlationId": "REDACTED",
+        "locale": "en",
+        "restrictionId": "",
+        "strings": {
+          "en": {
+            "translation": {}
+          }
+        }
+      },
+      "state": {
+        "data": {
+          "defaultAudioFileObject": {
+            "passthrough": "NONE"
+          },
+          "embeded_entity_uri": "spotify:album:6N9PS4QXF1D0OWPk0Sxtb4",
+          "entity": {
+            "duration": 0,
+            "hasVideo": false,
+            "id": "6N9PS4QXF1D0OWPk0Sxtb4",
+            "isExplicit": false,
+            "isPlayable": true,
+            "isPreRelease": false,
+            "name": "Whenever You Need Somebody",
+            "playabilityReason": "PLAYABLE",
+            "relatedEntityUri": "spotify:album:6N9PS4QXF1D0OWPk0Sxtb4",
+            "releaseDate": null,
+            "subtitle": "Rick Astley",
+            "title": "Whenever You Need Somebody",
+            "trackList": [
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/b4c682084c3fd05538726d0a126b7e14b6e92c83"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 213573,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "Never Gonna Give You Up",
+                "uid": "f3bafad587013869f01c",
+                "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/37d0ae538df83108ed2b2da8e94a133f9bb1ea56"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 233666,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "Whenever You Need Somebody",
+                "uid": "a3277ee905c005211464",
+                "uri": "spotify:track:6aiKIFjPwa3UvDCD5ecoJj"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/218ce9bda2e7ad945f675c8f3cb48cd94b8718fa"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 205533,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "Together Forever",
+                "uid": "279cfecf76b55c3bf1a9",
+                "uri": "spotify:track:76QJgXPE3oc1cnkE4PFHEn"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/40d4df455c652c1c0963d43d4de5dabec8c49989"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 220826,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "It Would Take a Strong Strong Man",
+                "uid": "3aa212123aaa525fd3a8",
+                "uri": "spotify:track:0lBiKGR22BDbGppvf0oqNP"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/73dfd9ba5074016d0fca6f7f4614e175e40a8695"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 260160,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "The Love Has Gone",
+                "uid": "4ab7280cce5d9f618961",
+                "uri": "spotify:track:1wJuO2d0TKiwlGegrkEmfN"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/39ec1ded0ae595e4a7c14ab69da8eb954169860f"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 249240,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "Don't Say Goodbye",
+                "uid": "1a08187a81df82188634",
+                "uri": "spotify:track:3xmdHhPcf37mGh31NH7jLT"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/4a43988010f11397d9eb72abf834078f92114bc2"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 232893,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "Slipping Away",
+                "uid": "deecdb0177fa8e962fc0",
+                "uri": "spotify:track:0n65kXgCMLQjF4tmAhVBoh"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/7e466e0e252fc59a64699ef560bae10e703c88c2"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 192800,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "No More Looking for Love",
+                "uid": "c7a6c3bec4eb24d0f684",
+                "uri": "spotify:track:5cR72f2kZlQBQ6LSOMcq48"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/006954ac11ccf87c1bf4df356485043660c3300c"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 222533,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "You Move Me",
+                "uid": "f401051524935cd761c5",
+                "uri": "spotify:track:5D6y101AHavzc26WgZsY1Q"
+              },
+              {
+                "audioPreview": {
+                  "format": "MP3_96",
+                  "url": "https://p.scdn.co/mp3-preview/ce44d724112998ebd7e60bb4b7c0c7d6ba424482"
+                },
+                "contentRatings": {
+                  "labels": []
+                },
+                "duration": 183026,
+                "entityType": "track",
+                "isExplicit": false,
+                "isNineteenPlus": false,
+                "isPlayable": true,
+                "playabilityReason": "PLAYABLE",
+                "subtitle": "Rick Astley",
+                "title": "When I Fall in Love",
+                "uid": "29de6eea381dac4920f1",
+                "uri": "spotify:track:4IUYyOxm7ujsmNRdDBqXKu"
+              }
+            ],
+            "type": "album",
+            "uri": "spotify:album:6N9PS4QXF1D0OWPk0Sxtb4",
+            "visualIdentity": {
+              "backgroundBase": {
+                "alpha": 255,
+                "blue": 118,
+                "green": 89,
+                "red": 0
+              },
+              "backgroundTintedBase": {
+                "alpha": 255,
+                "blue": 80,
+                "green": 53,
+                "red": 0
+              },
+              "image": [
+                {
+                  "maxHeight": 300,
+                  "maxWidth": 300,
+                  "url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d00001e02255e131abc1410833be95673"
+                },
+                {
+                  "maxHeight": 64,
+                  "maxWidth": 64,
+                  "url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d00004851255e131abc1410833be95673"
+                },
+                {
+                  "maxHeight": 640,
+                  "maxWidth": 640,
+                  "url": "https://image-cdn-fa.spotifycdn.com/image/ab67616d0000b273255e131abc1410833be95673"
+                }
+              ],
+              "textBase": {
+                "alpha": 255,
+                "blue": 255,
+                "green": 255,
+                "red": 255
+              },
+              "textBrightAccent": {
+                "alpha": 255,
+                "blue": 255,
+                "green": 255,
+                "red": 255
+              },
+              "textSubdued": {
+                "alpha": 255,
+                "blue": 251,
+                "green": 217,
+                "red": 124
+              }
+            }
+          }
+        },
+        "machineState": {
+          "currentPreviewTrackIndex": 0,
+          "initialized": false,
+          "platformSupportsEncryptedContent": false,
+          "playbackMode": "unknown",
+          "showOverflowMenu": false
+        },
+        "settings": {
+          "clientId": "REDACTED",
+          "entityContext": "album",
+          "isDarkMode": false,
+          "isIOS": false,
+          "isMobile": false,
+          "isSafari": false,
+          "isTablet": false,
+          "rtl": false,
+          "session": {
+            "accessToken": "REDACTED",
+            "accessTokenExpirationTimestampMs": 1781611715699,
+            "isAnonymous": true
+          }
+        }
+      }
+    }
+  },
+  "query": {
+    "id": "6N9PS4QXF1D0OWPk0Sxtb4"
+  },
+  "scriptLoader": []
+}

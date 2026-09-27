@@ -1,0 +1,6 @@
+{
+  "name": "Headphonix",
+  "description": "Headphonix music player and seamless playlist sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
