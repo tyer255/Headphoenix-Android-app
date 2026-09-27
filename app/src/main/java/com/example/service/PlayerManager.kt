@@ -451,11 +451,27 @@ object PlayerManager {
         startProgressLoop()
         startPlaybackService()
 
-        // Fetch recommendations for this track and cache artwork for notification recommendations
+        // Immediately resolve initial recommendations from queue and cache
+        val immediateRecs = (_queue.value.filterNot { it.id == track.id } + _recommendedTracks.value.filterNot { it.id == track.id }).distinctBy { it.id }.take(4)
+        if (immediateRecs.isNotEmpty()) {
+            _recommendedTracks.value = immediateRecs
+            onRecommendationsUpdatedListener?.invoke()
+            cacheRecommendationArtworks(immediateRecs)
+        }
+
+        // Fetch dynamic, track-specific recommendations asynchronously
         scope.launch {
             try {
-                val recs = repository.getRecommendations(track.id, track.title, track.artist)
-                val filtered = recs.filterNot { it.id == track.id }.take(6)
+                var recs = repository.getRadio(track.id, "${track.title} ${track.artist}")
+                if (recs.isEmpty()) {
+                    recs = repository.getRecommendations(track.id, track.title, track.artist)
+                }
+                if (recs.isEmpty() && track.artist.isNotBlank()) {
+                    val searchRes = repository.search(track.artist)
+                    recs = searchRes?.songs ?: emptyList()
+                }
+
+                val filtered = recs.filterNot { it.id == track.id }.distinctBy { it.id }.take(4)
                 if (filtered.isNotEmpty()) {
                     _recommendedTracks.value = filtered
                     onRecommendationsUpdatedListener?.invoke()
@@ -470,11 +486,6 @@ object PlayerManager {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Error fetching recommendations: ${e.message}")
-                val fallback = _queue.value.filterNot { it.id == track.id }.take(4)
-                if (fallback.isNotEmpty()) {
-                    _recommendedTracks.value = fallback
-                    onRecommendationsUpdatedListener?.invoke()
-                }
             }
         }
 
@@ -928,20 +939,23 @@ object PlayerManager {
         val ctx = appContext ?: return
         scope.launch(Dispatchers.IO) {
             val imageLoader = ImageLoader(ctx)
-            for (t in tracks.take(6)) {
-                val url = t.images?.large ?: t.images?.medium ?: t.images?.small ?: continue
-                if (url.isBlank() || recommendationArtCache.containsKey(t.id)) continue
+            for (t in tracks.take(4)) {
+                val url = t.images?.small ?: t.images?.medium ?: t.images?.large ?: continue
+                if (url.isBlank()) continue
                 try {
                     val req = ImageRequest.Builder(ctx)
                         .data(url)
+                        .size(160, 160)
                         .allowHardware(false)
                         .build()
                     val res = imageLoader.execute(req)
                     if (res is SuccessResult) {
                         val d = res.drawable
                         if (d is BitmapDrawable) {
+                            val orig = d.bitmap
+                            val scaled = Bitmap.createScaledBitmap(orig, 160, 160, true)
                             val stream = ByteArrayOutputStream()
-                            d.bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream)
+                            scaled.compress(Bitmap.CompressFormat.JPEG, 80, stream)
                             recommendationArtCache[t.id] = stream.toByteArray()
                         }
                     }

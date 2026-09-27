@@ -75,14 +75,25 @@ class PlaybackService : MediaLibraryService() {
                     val extras = Bundle().apply {
                         putBoolean("android.service.media.extra.SUGGESTED", true)
                         putBoolean("android.service.media.extra.RECENT", true)
+                        putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                        putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
+                        putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
+                        putBoolean("androidx.media.contentstyle.CONTENT_STYLE_SUPPORTED", true)
+                        putInt("androidx.media.contentstyle.CONTENT_STYLE_PLAYABLE_HINT", 1)
+                        putInt("androidx.media.contentstyle.CONTENT_STYLE_BROWSABLE_HINT", 1)
                     }
                     val params = LibraryParams.Builder()
                         .setExtras(extras)
                         .setSuggested(true)
                         .setRecent(true)
                         .build()
-                    session.notifyChildrenChanged(ROOT_ID, recs.size, params)
-                    session.notifyChildrenChanged(SUGGESTED_ROOT_ID, recs.size, params)
+                    val count = recs.size.coerceAtLeast(1)
+                    session.notifyChildrenChanged(ROOT_ID, count, params)
+                    session.notifyChildrenChanged(SUGGESTED_ROOT_ID, count, params)
+                    session.notifyChildrenChanged("", count, params)
+                    session.notifyChildrenChanged("root", count, params)
+                    session.notifyChildrenChanged("@media_suggested@", count, params)
+                    session.notifyChildrenChanged("@media_recent@", count, params)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to notify children changed", e)
