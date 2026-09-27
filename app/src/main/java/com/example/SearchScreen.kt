@@ -490,7 +490,7 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val filterList = listOf("All", "Songs", "Artists", "Albums", "Playlists")
-                items(filterList) { filter ->
+                items(filterList, key = { it }) { filter ->
                     val isSelected = selectedFilter == filter
                     Box(
                         modifier = Modifier
@@ -562,7 +562,7 @@ fun SearchScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(recentSearches) { item ->
+                                items(recentSearches, key = { "recent_$it" }) { item ->
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(50))
@@ -635,7 +635,7 @@ fun SearchScreen(
                                 "Coke Studio Bharat",
                                 "Desi Lofi"
                             )
-                            items(personalizedChips) { chip ->
+                            items(personalizedChips, key = { "chip_$it" }) { chip ->
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(50))
@@ -672,7 +672,7 @@ fun SearchScreen(
                 }
 
                 val categoryRows = SPOTIFY_BROWSE_ALL_CATEGORIES.chunked(2)
-                items(categoryRows) { pair ->
+                items(categoryRows, key = { it.firstOrNull()?.title ?: "" }) { pair ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -763,7 +763,7 @@ fun SearchScreen(
                     }
                 } else {
                     val discoverRows = discoverCards.chunked(2)
-                    items(discoverRows) { pair ->
+                    items(discoverRows, key = { it.firstOrNull()?.id ?: "" }) { pair ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -789,24 +789,15 @@ fun SearchScreen(
                                             }
                                         }
                                 ) {
-                                    // Ambient blurred glow
-                                    AsyncImage(
-                                        model = item.image,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .blur(25.dp)
-                                    )
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
                                                     listOf(
-                                                        Color(0x99000000),
-                                                        Color(0x40000000),
-                                                        Color(0xF5000000)
+                                                        Color(0xFF24242A),
+                                                        Color(0xFF18181B),
+                                                        Color(0xFF101012)
                                                     )
                                                 )
                                             )
@@ -958,7 +949,7 @@ fun SearchScreen(
                     else true
                 }
                 val languageRows = filteredLanguages.chunked(2)
-                items(languageRows) { pair ->
+                items(languageRows, key = { it.firstOrNull()?.name ?: "" }) { pair ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1081,7 +1072,7 @@ fun SearchScreen(
                     )
                 }
 
-                items(suggestions) { sug ->
+                items(suggestions, key = { "sug_${it.id ?: it.title}" }) { sug ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1317,7 +1308,7 @@ fun SearchScreen(
                         )
                     }
 
-                    items(tracks) { track ->
+                    items(tracks, key = { "search_tr_${it.id}" }) { track ->
                         val isPlayingThis = currentPlayingTrack?.id == track.id
                         val isSaved = savedTracks.contains(track.id)
 
@@ -1436,7 +1427,7 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(artists) { artist ->
+                            items(artists, key = { "search_art_${it.id}" }) { artist ->
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     modifier = Modifier
@@ -1493,7 +1484,7 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(albums) { album ->
+                            items(albums, key = { "search_alb_${it.id}" }) { album ->
                                 Column(
                                     modifier = Modifier
                                         .width(135.dp)
@@ -1551,7 +1542,7 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(playlists) { pl ->
+                            items(playlists, key = { "search_pl_${it.id}" }) { pl ->
                                 Column(
                                     modifier = Modifier
                                         .width(135.dp)

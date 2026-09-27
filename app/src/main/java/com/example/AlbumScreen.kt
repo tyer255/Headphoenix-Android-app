@@ -181,7 +181,7 @@ fun AlbumScreen(
                             }
                         }
 
-                        itemsIndexed(album.tracks ?: emptyList()) { index, track ->
+                        itemsIndexed(album.tracks ?: emptyList(), key = { _, track -> "album_tr_${track.id}" }) { index, track ->
                             val isThisPlaying = currentTrack?.id == track.id
                             val isLiked = PlaylistRepository.isTrackLiked(track.id)
 

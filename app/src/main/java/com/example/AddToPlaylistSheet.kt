@@ -122,7 +122,7 @@ fun AddToPlaylistSheet(
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
             ) {
-                items(filteredPlaylists) { playlist ->
+                items(filteredPlaylists, key = { it.id }) { playlist ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

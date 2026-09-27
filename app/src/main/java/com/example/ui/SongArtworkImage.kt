@@ -49,7 +49,7 @@ fun SongArtworkImage(
     val context = LocalContext.current
 
     // Determine initial candidate URLs in order of preference
-    val primaryUrl = remember(track, imageUrl) {
+    val primaryUrl = remember(track?.id, imageUrl, track?.images?.large, track?.images?.medium, track?.images?.small) {
         imageUrl?.takeIf { it.isNotBlank() }
             ?: track?.images?.large?.takeIf { it.isNotBlank() }
             ?: track?.images?.medium?.takeIf { it.isNotBlank() }
@@ -60,7 +60,7 @@ fun SongArtworkImage(
     var hasError by remember(primaryUrl) { mutableStateOf(false) }
 
     // Dynamic resolution fallback if URL is null or failed
-    LaunchedEffect(track, title, artist, hasError) {
+    LaunchedEffect(track?.id, title, artist, hasError) {
         if (currentUrl.isNullOrBlank() || hasError) {
             val t = title ?: track?.title
             val a = artist ?: track?.artist

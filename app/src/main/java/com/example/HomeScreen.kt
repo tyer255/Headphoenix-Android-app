@@ -96,6 +96,7 @@ fun HomeScreen(
     val downloadedTracks by AppDownloadManager.downloadedTracks.collectAsState()
     val likedTracks by PlaylistRepository.likedTracks.collectAsState()
     val personalizedSection by viewModel.personalizedSection.collectAsState()
+    val isOnline by com.example.util.NetworkMonitor.isOnline.collectAsState()
 
     var selectedFilter by remember { mutableStateOf("All") }
 
@@ -575,9 +576,101 @@ fun HomeScreen(
                 }
             }
 
+            // 1.5. OFFLINE BANNER & DOWNLOADED MUSIC (Displayed prominently when offline)
+            if (!isOnline) {
+                item(key = "offline_banner_card") {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1F1F24)),
+                        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF2E7D32)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowCircleDown,
+                                    contentDescription = "Offline Mode",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Offline Mode",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (downloadedTracks.isNotEmpty())
+                                        "${downloadedTracks.size} downloaded songs ready to play offline"
+                                    else
+                                        "No internet connection. Connect to stream or download music.",
+                                    color = Color(0xFFB0B0B8),
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (downloadedTracks.isNotEmpty()) {
+                    item(key = "offline_downloaded_row") {
+                        Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                            Text(
+                                text = "Downloaded Songs",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                            )
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(downloadedTracks, key = { "offline_${it.id}" }) { track ->
+                                    CardTrackItem(
+                                        track = track,
+                                        tag = "Offline",
+                                        isOffline = true,
+                                        isLiked = likedTracks.any { it.id == track.id },
+                                        isPlaying = currentTrack?.id == track.id && isPlaying,
+                                        onCardClick = {
+                                            playerViewModel.playTrack(track, downloadedTracks)
+                                        },
+                                        onLikeClick = {
+                                            PlaylistRepository.toggleLikeTrack(track)
+                                        },
+                                        onMoreClick = {
+                                            trackMenu(TrackMenuState(track = track))
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // 2. FEATURED HERO CAROUSEL CARD (Exactly matching upper screenshot)
             if (selectedFilter != "Podcasts") {
-                item {
+                item(key = "featured_hero_carousel") {
                     HeroCarouselCard(
                         heroTracks = heroTracks,
                         currentPlayingTrack = currentTrack,
@@ -594,7 +687,7 @@ fun HomeScreen(
 
             // 3. SECTION: "Recommended for today"
             if (selectedFilter != "Podcasts") {
-                item {
+                item(key = "recommended_section_header") {
                     Text(
                         text = "Recommended for today",
                         color = Color.White,
@@ -613,9 +706,8 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(combinedRecommended) { track ->
-                            val isOffline = track.title.contains("Baarishein", ignoreCase = true) ||
-                                            downloadedTracks.any { it.id == track.id }
+                        items(combinedRecommended, key = { "rec_${it.id}" }) { track ->
+                            val isOffline = downloadedTracks.any { it.id == track.id }
                             val isLiked = likedTracks.any { it.id == track.id }
 
                             CardTrackItem(
@@ -641,7 +733,7 @@ fun HomeScreen(
 
             // 4. SECTION: "Start listening" (Screenshots 1 & 2)
             if (selectedFilter != "Podcasts") {
-                item {
+                item(key = "start_listening_section") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -689,7 +781,7 @@ fun HomeScreen(
 
             // 5. SECTION: "BECAUSE YOU LISTEN TO [Top Artist]" (Dynamic user personalization)
             if (selectedFilter != "Podcasts") {
-                item {
+                item(key = "because_you_listen_section") {
                     val displayArtist = personalizedSection.artistName.ifBlank { "Anuv Jain" }
                     val displayAvatar = personalizedSection.artistAvatar.ifBlank { "https://i.scdn.co/image/ab6761610000e5eba837a6cb82dd949d5e1f9b53" }
                     val displayTracks = if (personalizedSection.tracks.isNotEmpty()) personalizedSection.tracks else becauseAnuvJainTracks
@@ -733,7 +825,7 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(displayTracks) { track ->
+                        items(displayTracks, key = { "disp_${it.id}" }) { track ->
                             val isLiked = likedTracks.any { it.id == track.id } ||
                                           likedTracks.any { it.title.equals(track.title, ignoreCase = true) }
                             val isCurrent = currentTrack?.id == track.id && isPlaying
@@ -741,7 +833,7 @@ fun HomeScreen(
                             CardTrackItem(
                                 track = track,
                                 tag = "Single",
-                                isOffline = false,
+                                isOffline = downloadedTracks.any { it.id == track.id },
                                 isLiked = isLiked,
                                 isPlaying = isCurrent,
                                 onCardClick = {
@@ -761,7 +853,7 @@ fun HomeScreen(
 
             // 6. SECTION: "Trending Hits" (Screenshots 2 & 3)
             if (selectedFilter != "Podcasts") {
-                item {
+                item(key = "trending_hits_section") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -790,14 +882,14 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(liveTrending) { track ->
+                        items(liveTrending, key = { "trend_${it.id}" }) { track ->
                             val isLiked = likedTracks.any { it.id == track.id }
                             val isCurrent = currentTrack?.id == track.id && isPlaying
 
                             CardTrackItem(
                                 track = track,
                                 tag = "Single",
-                                isOffline = false,
+                                isOffline = downloadedTracks.any { it.id == track.id },
                                 isLiked = isLiked,
                                 isPlaying = isCurrent,
                                 onCardClick = {
@@ -817,7 +909,7 @@ fun HomeScreen(
 
             // 7. SECTION: "Recommended Stations" (Screenshots 3 & 4)
             if (selectedFilter != "Podcasts") {
-                item {
+                item(key = "recommended_stations_section") {
                     Text(
                         text = "Recommended Stations",
                         color = Color.White,
@@ -831,7 +923,7 @@ fun HomeScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        items(recommendedStations) { station ->
+                        items(recommendedStations, key = { "st_${it.id}" }) { station ->
                             RadioStationCard(
                                 station = station,
                                 onClick = {
@@ -848,7 +940,7 @@ fun HomeScreen(
             }
 
             // 8. SECTION: "Recents" (Screenshot 4)
-            item {
+            item(key = "recents_section") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -877,7 +969,7 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // Card 1: Liked Songs Card (Purple-indigo gradient)
-                    item {
+                    item(key = "recents_liked_songs_card") {
                         Card(
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF161619)),
@@ -925,7 +1017,7 @@ fun HomeScreen(
                     }
 
                     // Card 2: Blend Card
-                    item {
+                    item(key = "recents_blend_card") {
                         Card(
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF161619)),
@@ -970,11 +1062,11 @@ fun HomeScreen(
                     }
 
                     // Card 3+: Recently Played History if any
-                    items(recentlyPlayedHistory.take(4)) { track ->
+                    items(recentlyPlayedHistory.take(4), key = { "recent_${it.id}" }) { track ->
                         CardTrackItem(
                             track = track,
                             tag = "Single",
-                            isOffline = false,
+                            isOffline = downloadedTracks.any { it.id == track.id },
                             isLiked = likedTracks.any { it.id == track.id },
                             isPlaying = currentTrack?.id == track.id && isPlaying,
                             onCardClick = {
@@ -992,7 +1084,7 @@ fun HomeScreen(
             }
 
             // 9. SECTION: "Your favourite artists" (Screenshots 4 & 5)
-            item {
+            item(key = "favourite_artists_section") {
                 Text(
                     text = "Your favourite artists",
                     color = Color.White,
@@ -1014,7 +1106,7 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(liveArtists) { artist ->
+                    items(liveArtists, key = { "art_${it.id}" }) { artist ->
                         val isFollowing = followedArtistIds.contains(artist.id)
 
                         ArtistFollowCard(
@@ -1037,7 +1129,7 @@ fun HomeScreen(
             }
 
             // 10. SECTION: "Popular albums and new releases" (Screenshot 5)
-            item {
+            item(key = "popular_albums_section") {
                 Text(
                     text = "Popular albums and new releases",
                     color = Color.White,
@@ -1061,7 +1153,7 @@ fun HomeScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    items(liveAlbums) { album ->
+                    items(liveAlbums, key = { "alb_${it.id}" }) { album ->
                         PopularAlbumCard(
                             album = album,
                             onClick = {

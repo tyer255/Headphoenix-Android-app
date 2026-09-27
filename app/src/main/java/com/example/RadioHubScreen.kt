@@ -85,7 +85,7 @@ fun RadioHubScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             LazyRow(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                items(dummyStations) { station ->
+                items(dummyStations, key = { it.first }) { station ->
                     Column(
                         modifier = Modifier.width(160.dp)
                     ) {

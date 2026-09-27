@@ -21,6 +21,7 @@ class MyApplication : Application(), ImageLoaderFactory {
         com.example.data.PlaylistRepository.init(this)
         com.example.data.PlaybackHistoryRepository.init(this)
         com.example.data.AppDownloadManager.initCompleted(this)
+        com.example.util.NetworkMonitor.init(this)
         com.example.service.PlayerManager.init(this)
     }
 

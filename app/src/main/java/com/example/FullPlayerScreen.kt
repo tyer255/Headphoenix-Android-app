@@ -133,15 +133,25 @@ fun FullPlayerScreen(
     var recommendations by remember { mutableStateOf<List<com.example.data.remote.models.TrackDto>>(emptyList()) }
     val vmRecommendedTracks by viewModel.recommendedTracks.collectAsState()
 
-    val effectiveRecommendations = remember(recommendations, vmRecommendedTracks, queue, track) {
-        val list = if (recommendations.isNotEmpty()) recommendations else vmRecommendedTracks
+    val upNextTracks = remember(queue, currentQueueIndex, track, recommendations, vmRecommendedTracks) {
         val currentId = track?.id
-        val filtered = list.filterNot { it.id == currentId }
-        if (filtered.isNotEmpty()) {
-            filtered
+        val activeIdx = if (currentQueueIndex in queue.indices && queue[currentQueueIndex].id == currentId) {
+            currentQueueIndex
         } else {
-            queue.filterNot { it.id == currentId }.take(4)
+            queue.indexOfFirst { it.id == currentId }
         }
+
+        val followingQueue = if (activeIdx >= 0 && activeIdx + 1 < queue.size) {
+            queue.subList(activeIdx + 1, queue.size)
+        } else {
+            emptyList()
+        }
+
+        val remainingQueue = queue.filterNot { it.id == currentId || followingQueue.contains(it) }
+        val recs = (if (recommendations.isNotEmpty()) recommendations else vmRecommendedTracks).filterNot { it.id == currentId }
+
+        val combined = (followingQueue + remainingQueue + recs).distinctBy { it.id }.filterNot { it.id == currentId }
+        combined.take(4)
     }
 
     LaunchedEffect(track?.id) {
@@ -276,38 +286,31 @@ fun FullPlayerScreen(
                     )
             )
         } else {
-            // Album Artwork & Dynamic Gradient/Liquid Glass Background
-            val bgArtwork = track?.images?.large ?: track?.images?.medium ?: track?.images?.small
-            if (!bgArtwork.isNullOrBlank()) {
-                AsyncImage(
-                    model = bgArtwork,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(80.dp)
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(themeColor.copy(alpha = 0.6f), Color(0xFF121212))
+            // High-performance dynamic gradient background (Zero GPU blur overhead for 120 FPS)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                themeColor.copy(alpha = 0.75f),
+                                themeColor.copy(alpha = 0.35f),
+                                Color(0xFF141416),
+                                Color(0xFF121212)
                             )
                         )
-                )
-            }
+                    )
+            )
 
-            // Normal gradient overlay for artwork view
+            // Dynamic depth shading overlay
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF101010).copy(alpha = 0.4f), 
-                                Color(0xFF121212).copy(alpha = 0.95f)
+                                Color(0xFF101010).copy(alpha = 0.25f), 
+                                Color(0xFF121212).copy(alpha = 0.85f)
                             )
                         )
                     )
@@ -758,53 +761,77 @@ Row(verticalAlignment = Alignment.CenterVertically) {
                 }
             }
 
-            // Spotify-style Recommended Songs Section with 4 Thumbnail Cards
-            if (effectiveRecommendations.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(20.dp))
-                Column(
+            // 4 Album-Art Thumbnails Section for Upcoming Songs in Queue (Up Next) with Skeleton Loading State
+            Spacer(modifier = Modifier.height(18.dp))
+            if (upNextTracks.isNotEmpty()) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.06f))
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .testTag("up_next_thumbnails_row"),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Recommended",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.95f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            letterSpacing = (-0.2).sp
-                        )
-                        Text(
-                            text = "4 songs",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 11.sp
-                        )
-                    }
+                    upNextTracks.take(4).forEachIndexed { index, upcomingTrack ->
+                        val artworkUrl = upcomingTrack.images?.large
+                            ?: upcomingTrack.images?.medium
+                            ?: upcomingTrack.images?.small
+                            ?: ""
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        effectiveRecommendations.take(4).forEach { recTrack ->
-                            RecommendedTrackTile(
-                                track = recTrack,
-                                onClick = {
-                                    viewModel.playTrack(recTrack, effectiveRecommendations)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF282828))
+                                .clickable {
+                                    viewModel.playTrack(
+                                        upcomingTrack,
+                                        if (queue.contains(upcomingTrack)) queue else (queue + upcomingTrack)
+                                    )
                                 }
-                            )
+                                .testTag("up_next_thumbnail_$index"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (artworkUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(artworkUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = upcomingTrack.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                com.example.ui.SongArtworkImage(
+                                    track = upcomingTrack,
+                                    title = upcomingTrack.title,
+                                    artist = upcomingTrack.artist,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
+                    }
+                }
+            } else {
+                // Skeleton loading state: 4 placeholder boxes preventing layout shift
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("up_next_thumbnails_skeleton_row"),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(4) { index ->
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF222225))
+                                .testTag("up_next_skeleton_$index")
+                        )
                     }
                 }
             }

@@ -514,15 +514,20 @@ object PlayerManager {
             }
         }
 
-        val localFile = File(ctx.filesDir, "${track.id}.m4a")
+        val localStreamUrl = com.example.data.AppDownloadManager.getLocalStreamUrl(ctx, track.id)
+        if (!localStreamUrl.isNullOrEmpty()) {
+            Log.i(TAG, "Playing from offline download: $localStreamUrl")
+            isUsingYouTubeEngine = false
+            youTubeAudioEngine?.stop()
+            val offlineTrack = com.example.data.AppDownloadManager.getDownloadedTrack(track.id) ?: track
+            playAudioUrls(localStreamUrl, emptyList(), offlineTrack)
+            return
+        }
+
         if (track.streamUrl?.startsWith("file://") == true) {
             isUsingYouTubeEngine = false
             youTubeAudioEngine?.stop()
             playAudioUrls(track.streamUrl, emptyList(), track)
-        } else if (localFile.exists() && localFile.length() > 0) {
-            isUsingYouTubeEngine = false
-            youTubeAudioEngine?.stop()
-            playAudioUrls("file://${localFile.absolutePath}", emptyList(), track)
         } else {
             val titleArtistKey = "${track.title.trim().lowercase()}__${track.artist.trim().lowercase()}"
             val cachedUrl = playbackUrlCache[track.id] ?: playbackUrlCache[titleArtistKey]
@@ -533,13 +538,33 @@ object PlayerManager {
                 preResolveNextTrack()
             } else {
                 scope.launch {
-                    val resolvedUrl = resolveTrackStreamUrl(track)
-                    if (resolvedUrl != null) {
+                    val resolvedPair = resolveTrackStreamWithFallbacks(track)
+                    if (resolvedPair != null) {
+                        val (primaryUrl, fallbacks) = resolvedPair
                         isUsingYouTubeEngine = false
                         youTubeAudioEngine?.stop()
-                        playAudioUrls(resolvedUrl, emptyList(), track)
+                        playAudioUrls(primaryUrl, fallbacks, track)
                         preResolveNextTrack()
                     } else {
+                        // Attempt headless YouTube engine fallback if we have a query
+                        try {
+                            val ytQuery = "${track.title} ${track.artist}".trim()
+                            val searchRes = repository.search(ytQuery)
+                            val matched = searchRes?.songs?.firstOrNull()
+                            if (matched != null) {
+                                val resolvedData = repository.resolvePlayback(matched.id, matched.title, matched.artist, matched.duration)
+                                val fallbackStreamUrl = resolvedData?.stream?.url
+                                if (!fallbackStreamUrl.isNullOrBlank() && !fallbackStreamUrl.startsWith("youtube:")) {
+                                    isUsingYouTubeEngine = false
+                                    youTubeAudioEngine?.stop()
+                                    playAudioUrls(fallbackStreamUrl, resolvedData.stream.fallbackUrls ?: emptyList(), track)
+                                    return@launch
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Final fallback failed: ${e.message}")
+                        }
+
                         Log.e(TAG, "No playback stream available for ${track.title} - ${track.artist}")
                         _isLoading.value = false
                         _isPlaying.value = false
@@ -549,73 +574,80 @@ object PlayerManager {
         }
     }
 
-    private suspend fun resolveTrackStreamUrl(track: TrackDto): String? {
+    private suspend fun resolveTrackStreamWithFallbacks(track: TrackDto): Pair<String, List<String>>? {
         val cacheKey = track.id
         val titleArtistKey = "${track.title.trim().lowercase()}__${track.artist.trim().lowercase()}"
 
-        playbackUrlCache[cacheKey]?.let { return it }
-        playbackUrlCache[titleArtistKey]?.let { return it }
+        playbackUrlCache[cacheKey]?.let { return Pair(it, emptyList()) }
+        playbackUrlCache[titleArtistKey]?.let { return Pair(it, emptyList()) }
 
         if (!track.streamUrl.isNullOrBlank() && (track.streamUrl.startsWith("http") || track.streamUrl.startsWith("file"))) {
             playbackUrlCache[cacheKey] = track.streamUrl
-            return track.streamUrl
+            return Pair(track.streamUrl, emptyList())
         }
 
-        // Attempt 1: Direct backend resolve if saavn- or valid ID
+        // Attempt 1: Direct backend resolve
         try {
             val data = repository.resolvePlayback(track.id, track.title, track.artist, track.duration)
-            val url = data?.stream?.url
+            val stream = data?.stream
+            val url = stream?.url
             if (!url.isNullOrBlank()) {
-                if (url.startsWith("youtube:") || data.stream.descriptorType == "youtube") {
+                if (url.startsWith("youtube:") || stream.descriptorType == "youtube") {
                     val ytId = url.removePrefix("youtube:").trim()
                     val directAudio = YouTubeResolver.resolveStreamUrl(ytId)
                     if (directAudio != null) {
                         playbackUrlCache[cacheKey] = directAudio
                         playbackUrlCache[titleArtistKey] = directAudio
-                        return directAudio
+                        return Pair(directAudio, emptyList())
                     }
                 } else {
                     playbackUrlCache[cacheKey] = url
                     playbackUrlCache[titleArtistKey] = url
-                    return url
+                    val fallbacks = stream.fallbackUrls ?: emptyList()
+                    return Pair(url, fallbacks)
                 }
             }
         } catch (e: Exception) {
-            // Fallback
+            Log.w(TAG, "Attempt 1 resolve error: ${e.message}")
         }
 
-        // Attempt 2: Search backend by Title + Artist to find matching saavn- ID
+        // Attempt 2: Search backend by Title + Artist
         try {
             val searchQuery = "${track.title} ${track.artist}".trim()
             val searchRes = repository.search(searchQuery)
             val matched = searchRes?.songs?.firstOrNull()
             if (matched != null) {
                 val data = repository.resolvePlayback(matched.id, matched.title, matched.artist, matched.duration)
-                val url = data?.stream?.url
+                val stream = data?.stream
+                val url = stream?.url
                 if (!url.isNullOrBlank() && !url.startsWith("youtube:")) {
                     playbackUrlCache[cacheKey] = url
                     playbackUrlCache[titleArtistKey] = url
                     playbackUrlCache[matched.id] = url
-                    return url
+                    return Pair(url, stream.fallbackUrls ?: emptyList())
                 }
             }
         } catch (e: Exception) {
-            // Fallback
+            Log.w(TAG, "Attempt 2 resolve error: ${e.message}")
         }
 
-        // Attempt 3: Fast YouTube stream resolve (< 1.5s timeout)
+        // Attempt 3: Fast YouTube direct stream resolve
         try {
             val ytUrl = YouTubeResolver.searchAndResolve("${track.title} ${track.artist}".trim())
             if (!ytUrl.isNullOrBlank()) {
                 playbackUrlCache[cacheKey] = ytUrl
                 playbackUrlCache[titleArtistKey] = ytUrl
-                return ytUrl
+                return Pair(ytUrl, emptyList())
             }
         } catch (e: Exception) {
-            // Fallback
+            Log.w(TAG, "Attempt 3 resolve error: ${e.message}")
         }
 
         return null
+    }
+
+    private suspend fun resolveTrackStreamUrl(track: TrackDto): String? {
+        return resolveTrackStreamWithFallbacks(track)?.first
     }
 
     private fun preResolveNextTrack() {

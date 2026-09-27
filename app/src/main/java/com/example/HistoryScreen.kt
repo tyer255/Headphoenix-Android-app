@@ -50,7 +50,7 @@ fun HistoryScreen(onBack: () -> Unit) {
                 Text("Today", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(8.dp))
             }
-            items(playlists.take(5)) { pl ->
+            items(playlists.take(5), key = { "hist_pl_${it.id}" }) { pl ->
                 Row(
                     modifier = Modifier.fillMaxWidth().height(64.dp),
                     verticalAlignment = Alignment.CenterVertically

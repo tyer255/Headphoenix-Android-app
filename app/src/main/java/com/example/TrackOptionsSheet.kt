@@ -264,7 +264,7 @@ fun TrackOptionsSheet(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                        items(playlists) { pl ->
+                        items(playlists, key = { it.id }) { pl ->
                             val alreadyInPlaylist = pl.tracks.any { it.id == track.id }
                             Row(
                                 modifier = Modifier

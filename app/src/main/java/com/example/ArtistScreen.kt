@@ -220,7 +220,7 @@ fun ArtistScreen(
                                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                             )
                         }
-                        items(artist.topTracks) { track ->
+                        items(artist.topTracks, key = { "top_${it.id}" }) { track ->
                             val isCurrentTrack = currentTrack?.id == track.id
                             Row(
                                 modifier = Modifier
@@ -247,7 +247,7 @@ fun ArtistScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    val randomStreams = remember { (10000000..500000000).random().toString().reversed().chunked(3).joinToString(",").reversed() }
+                                    val randomStreams = remember(track.id) { (10000000..500000000).random().toString().reversed().chunked(3).joinToString(",").reversed() }
                                     Text(
                                         text = randomStreams,
                                         color = Color.Gray,
@@ -278,7 +278,7 @@ fun ArtistScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(horizontal = 16.dp)
                             ) {
-                                items(artist.albums) { album ->
+                                items(artist.albums, key = { "alb_${it.id}" }) { album ->
                                     Column(
                                         modifier = Modifier.width(140.dp).clickable { onNavigateToAlbum(album.id) }
                                     ) {
@@ -327,7 +327,7 @@ fun ArtistScreen(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 contentPadding = PaddingValues(horizontal = 16.dp)
                             ) {
-                                items(artist.singles) { single ->
+                                items(artist.singles, key = { "single_${it.id}" }) { single ->
                                     Column(
                                         modifier = Modifier.width(140.dp).clickable { playerViewModel.playTrack(single) }
                                     ) {

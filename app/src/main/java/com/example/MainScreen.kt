@@ -297,27 +297,15 @@ fun MainScreen(
                 ) {
                     val currentTrack by playerViewModel.currentTrack.collectAsState()
                     
-                    // Unified Glass Background
-                    if (currentTrack?.images?.medium != null) {
-                        coil.compose.AsyncImage(
-                            model = currentTrack?.images?.medium,
-                            contentDescription = null,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            modifier = Modifier
-                                .matchParentSize()
-                                .blur(45.dp)
-                        )
-                    }
-                    
                     Box(
                         modifier = Modifier
                             .matchParentSize()
                             .background(
                                 Brush.verticalGradient(
                                     colors = listOf(
-                                        Color(0xFF101010).copy(alpha = 0.5f),
-                                        Color(0xFF101010).copy(alpha = 0.85f),
-                                        Color(0xFF000000)
+                                        Color(0x00121214),
+                                        Color(0xE6121214),
+                                        Color(0xFF0C0C0E)
                                     )
                                 )
                             )
@@ -336,6 +324,7 @@ fun MainScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(Color(0xFF101014))
                                 .windowInsetsPadding(WindowInsets.navigationBars)
                         ) {
                             BottomNavigationBar(

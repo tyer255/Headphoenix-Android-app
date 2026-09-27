@@ -412,7 +412,7 @@ fun LibraryScreen(
             }
 
             val pills = listOf("Playlists", "Artists", "Albums", "Podcasts", "Downloaded")
-            items(pills) { pill ->
+            items(pills, key = { it }) { pill ->
                 val isSelected = selectedFilter == pill
                 Box(
                     modifier = Modifier
@@ -574,6 +574,8 @@ fun LibraryScreen(
                                     "action_add_podcasts" -> android.widget.Toast.makeText(context, "Explore podcasts in Search", android.widget.Toast.LENGTH_SHORT).show()
                                     "action_add_events" -> android.widget.Toast.makeText(context, "Events and venues coming soon", android.widget.Toast.LENGTH_SHORT).show()
                                 }
+                            } else if (item is LibraryDisplayItem.DownloadedTrackItem) {
+                                playerViewModel?.playTrack(item.track, downloadedTracks)
                             } else if (item.targetRoute.startsWith("playlist/")) {
                                 onNavigateToPlaylist(item.targetRoute.removePrefix("playlist/"))
                             }
@@ -598,6 +600,8 @@ fun LibraryScreen(
                                     "action_add_podcasts" -> android.widget.Toast.makeText(context, "Explore podcasts in Search", android.widget.Toast.LENGTH_SHORT).show()
                                     "action_add_events" -> android.widget.Toast.makeText(context, "Events and venues coming soon", android.widget.Toast.LENGTH_SHORT).show()
                                 }
+                            } else if (item is LibraryDisplayItem.DownloadedTrackItem) {
+                                playerViewModel?.playTrack(item.track, downloadedTracks)
                             } else if (item.targetRoute.startsWith("playlist/")) {
                                 onNavigateToPlaylist(item.targetRoute.removePrefix("playlist/"))
                             }
