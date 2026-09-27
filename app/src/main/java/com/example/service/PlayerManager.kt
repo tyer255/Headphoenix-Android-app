@@ -906,10 +906,10 @@ object PlayerManager {
 
     fun getRecommendedTracks(): List<TrackDto> {
         val recs = _recommendedTracks.value
-        if (recs.isNotEmpty()) return recs
+        if (recs.isNotEmpty()) return recs.take(4)
         val currentId = _currentTrack.value?.id
         val q = _queue.value.filterNot { it.id == currentId }
-        if (q.isNotEmpty()) return q.take(6)
+        if (q.isNotEmpty()) return q.take(4)
         return emptyList()
     }
 

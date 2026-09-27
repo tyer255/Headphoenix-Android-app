@@ -147,6 +147,12 @@ class PlaybackService : MediaLibraryService() {
                 putBoolean("android.service.media.extra.SUGGESTED", true)
                 putBoolean("android.service.media.extra.RECENT", true)
                 putBoolean("android.service.media.extra.OFFLINE", false)
+                putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
+                putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 1)
+                putBoolean("androidx.media.contentstyle.CONTENT_STYLE_SUPPORTED", true)
+                putInt("androidx.media.contentstyle.CONTENT_STYLE_PLAYABLE_HINT", 1)
+                putInt("androidx.media.contentstyle.CONTENT_STYLE_BROWSABLE_HINT", 1)
             }
 
             val isSuggested = params?.isSuggested == true ||
@@ -176,6 +182,15 @@ class PlaybackService : MediaLibraryService() {
             return Futures.immediateFuture(LibraryResult.ofItem(rootItem, libraryParams))
         }
 
+        override fun onSubscribe(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+            return Futures.immediateFuture(LibraryResult.ofVoid())
+        }
+
         override fun onGetChildren(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
@@ -185,13 +200,17 @@ class PlaybackService : MediaLibraryService() {
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             val recs = PlayerManager.getRecommendedTracks()
-            val mediaItems = recs.take(6).map { track ->
+            val mediaItems = recs.take(4).map { track ->
                 buildMediaItemFromTrack(track)
             }
 
             val extras = Bundle().apply {
                 putBoolean("android.service.media.extra.SUGGESTED", true)
                 putBoolean("android.service.media.extra.RECENT", true)
+                putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
+                putBoolean("androidx.media.contentstyle.CONTENT_STYLE_SUPPORTED", true)
+                putInt("androidx.media.contentstyle.CONTENT_STYLE_PLAYABLE_HINT", 1)
             }
             val returnParams = LibraryParams.Builder()
                 .setExtras(extras)
@@ -201,6 +220,32 @@ class PlaybackService : MediaLibraryService() {
 
             return Futures.immediateFuture(
                 LibraryResult.ofItemList(ImmutableList.copyOf(mediaItems), returnParams)
+            )
+        }
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+            return Futures.immediateFuture(LibraryResult.ofVoid())
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val recs = PlayerManager.getRecommendedTracks()
+            val mediaItems = recs.take(4).map { track ->
+                buildMediaItemFromTrack(track)
+            }
+            return Futures.immediateFuture(
+                LibraryResult.ofItemList(ImmutableList.copyOf(mediaItems), params)
             )
         }
 
@@ -231,6 +276,26 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
             return Futures.immediateFuture(mediaItems)
+        }
+
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val requestedItem = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
+            if (requestedItem != null) {
+                val trackId = requestedItem.mediaId
+                val track = PlayerManager.findTrackById(trackId)
+                if (track != null) {
+                    PlayerManager.playTrack(track, PlayerManager.getRecommendedTracks())
+                }
+            }
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+            )
         }
 
         override fun onPlaybackResumption(
@@ -285,6 +350,10 @@ class PlaybackService : MediaLibraryService() {
             putString("track_id", track.id)
             putString("title", track.title)
             putString("artist", track.artist)
+            putBoolean("android.service.media.extra.SUGGESTED", true)
+            putBoolean("android.service.media.extra.RECENT", true)
+            putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
+            putInt("androidx.media.contentstyle.CONTENT_STYLE_PLAYABLE_HINT", 1)
         }
         metaBuilder.setExtras(itemExtras)
 
