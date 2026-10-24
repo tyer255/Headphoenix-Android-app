@@ -17,10 +17,14 @@ android {
     applicationId = "com.aistudio.spotiz.abxzpq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 10
+    versionName = "2.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    ndk {
+      abiFilters += listOf("arm64-v8a", "x86_64")
+    }
   }
 
   signingConfigs {
@@ -64,6 +68,9 @@ android {
   packaging {
     jniLibs {
       useLegacyPackaging = true
+    }
+    resources {
+      excludes += "/META-INF/{AL2.0,LGPL2.1,NOTICE.md,LICENSE.md,NOTICE,LICENSE}"
     }
   }
 }
@@ -146,7 +153,7 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
-  debugImplementation(libs.androidx.compose.ui.test.manifest)
+  // debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   // "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)

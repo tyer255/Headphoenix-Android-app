@@ -204,7 +204,7 @@ object AppDownloadManager {
 
                 if (isSupportedYtDlp && MediaProcessingEngine.engineStatus.value.isYtDlpAvailable) {
                     try {
-                        val cookieHeader = CookieRepository.getCookieHeader()
+                        val cookieHeader = CookieRepository.getRawCookieText() ?: CookieRepository.getCookieHeader()
                         val result = MediaProcessingEngine.executeYtDlp(
                             context = context,
                             url = urlToDownload!!,

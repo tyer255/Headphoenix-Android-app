@@ -63,6 +63,30 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `user test netscape cookie preset and parsing`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    com.example.data.CookieRepository.initialize(context)
+    com.example.data.CookieRepository.saveCookies(
+      rawCookie = com.example.data.CookieRepository.USER_TEST_NETSCAPE_COOKIE,
+      isEnabled = true
+    )
+
+    val raw = com.example.data.CookieRepository.getRawCookieText()
+    org.junit.Assert.assertEquals(com.example.data.CookieRepository.USER_TEST_NETSCAPE_COOKIE, raw)
+
+    val header = com.example.data.CookieRepository.getCookieHeader()
+    org.junit.Assert.assertNotNull(header)
+    org.junit.Assert.assertFalse("HTTP header must not contain newlines", header!!.contains("\n"))
+    org.junit.Assert.assertTrue("HTTP header must contain LOGIN_INFO", header.contains("LOGIN_INFO="))
+
+    val netscapeFile = com.example.data.MediaProcessingEngine.createNetscapeCookieFile(context, raw!!)
+    org.junit.Assert.assertNotNull(netscapeFile)
+    val fileText = netscapeFile!!.readText()
+    org.junit.Assert.assertTrue(fileText.contains(".youtube.com\tTRUE\t/\tTRUE\t1827392555\tLOGIN_INFO"))
+    netscapeFile.delete()
+  }
+
+  @Test
   fun `engine status initial state and flow validation`() {
     val status = com.example.data.MediaProcessingEngine.engineStatus.value
     org.junit.Assert.assertNotNull(status)

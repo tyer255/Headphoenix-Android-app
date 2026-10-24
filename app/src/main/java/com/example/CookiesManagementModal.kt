@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -49,7 +50,7 @@ fun CookiesManagementModal(
     var isEnabled by remember { mutableStateOf(cookieConfig.isEnabled) }
     var speedBooster by remember { mutableStateOf(cookieConfig.speedBoosterEnabled) }
     var bufferChunkKb by remember { mutableIntStateOf(cookieConfig.bufferChunkSizeKb) }
-    var isPasswordMasked by remember { mutableStateOf(true) }
+    var isPasswordMasked by remember { mutableStateOf(false) }
     var isTestingConnection by remember { mutableStateOf(false) }
     var testResultText by remember { mutableStateOf(cookieConfig.lastTestStatus) }
     var testSuccess by remember { mutableStateOf<Boolean?>(null) }
@@ -177,12 +178,54 @@ fun CookiesManagementModal(
                     fontWeight = FontWeight.Medium
                 )
 
-                Row {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = {
+                            cookieText = CookieRepository.USER_TEST_NETSCAPE_COOKIE
+                            isPasswordMasked = false
+                            isEnabled = true
+                            CookieRepository.saveCookies(
+                                rawCookie = CookieRepository.USER_TEST_NETSCAPE_COOKIE,
+                                customUserAgent = userAgentText,
+                                isEnabled = true,
+                                speedBooster = speedBooster,
+                                bufferSizeKb = bufferChunkKb
+                            )
+                            Toast.makeText(context, "Test Cookie pasted!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GreenPrimary,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .height(34.dp)
+                            .testTag("paste_test_cookie_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = "Paste Test Cookie",
+                            tint = Color.Black,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Paste Test Cookie",
+                            color = Color.Black,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
                     TextButton(
                         onClick = {
                             val clipboardText = clipboardManager.getText()?.text
                             if (!clipboardText.isNullOrBlank()) {
                                 cookieText = clipboardText
+                                isPasswordMasked = false
                                 Toast.makeText(context, "Pasted from clipboard", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
@@ -190,20 +233,13 @@ fun CookiesManagementModal(
                         },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentPaste,
-                            contentDescription = "Paste",
-                            tint = GreenPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Paste", color = GreenPrimary, fontSize = 12.sp)
+                        Text("Clipboard", color = GreenPrimary, fontSize = 12.sp)
                     }
 
                     if (cookieText.isNotEmpty()) {
                         TextButton(
                             onClick = { cookieText = "" },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text("Clear", color = Color(0xFFFF6B6B), fontSize = 12.sp)
                         }
@@ -211,17 +247,18 @@ fun CookiesManagementModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
                 value = cookieText,
                 onValueChange = { cookieText = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 100.dp, max = 160.dp),
+                    .heightIn(min = 120.dp, max = 180.dp)
+                    .testTag("cookie_string_input"),
                 placeholder = {
                     Text(
-                        "Paste your authorized cookies here (e.g. SID=...; HSID=...; SAPISID=...;)",
+                        "Tap 'Paste Test Cookie' or paste your Netscape / Cookie string here...",
                         color = Color(0xFF6E6E73),
                         fontSize = 13.sp
                     )
@@ -261,15 +298,35 @@ fun CookiesManagementModal(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
-                    selected = false,
+                    selected = cookieText == CookieRepository.USER_TEST_NETSCAPE_COOKIE,
                     onClick = {
-                        cookieText = "VISITOR_INFO1_LIVE=auth_sample; SID=sample_sid_auth; HSID=sample_hsid; LOGIN_INFO=sample_login;"
-                        Toast.makeText(context, "Filled YouTube Music template", Toast.LENGTH_SHORT).show()
+                        cookieText = CookieRepository.USER_TEST_NETSCAPE_COOKIE
+                        isPasswordMasked = false
+                        isEnabled = true
+                        CookieRepository.saveCookies(
+                            rawCookie = CookieRepository.USER_TEST_NETSCAPE_COOKIE,
+                            customUserAgent = userAgentText,
+                            isEnabled = true,
+                            speedBooster = speedBooster,
+                            bufferSizeKb = bufferChunkKb
+                        )
+                        Toast.makeText(context, "Test Cookie pasted!", Toast.LENGTH_SHORT).show()
                     },
-                    label = { Text("YouTube Template", fontSize = 12.sp) },
+                    label = { Text("Paste Test Cookie", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ContentPaste,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
                     colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color(0xFF26262A),
-                        labelColor = Color.White
+                        selectedContainerColor = GreenPrimary,
+                        selectedLabelColor = Color.Black,
+                        selectedLeadingIconColor = Color.Black,
+                        containerColor = Color(0xFF142E1F),
+                        labelColor = GreenPrimary,
+                        iconColor = GreenPrimary
                     ),
                     shape = RoundedCornerShape(20.dp)
                 )
@@ -277,10 +334,10 @@ fun CookiesManagementModal(
                 FilterChip(
                     selected = false,
                     onClick = {
-                        cookieText = "session_token=usr_auth_stream; cdn_token=media_access_verified;"
-                        Toast.makeText(context, "Filled Media CDN template", Toast.LENGTH_SHORT).show()
+                        cookieText = "VISITOR_INFO1_LIVE=auth_sample; SID=sample_sid_auth; HSID=sample_hsid; LOGIN_INFO=sample_login;"
+                        Toast.makeText(context, "Filled YouTube Music template", Toast.LENGTH_SHORT).show()
                     },
-                    label = { Text("Media CDN", fontSize = 12.sp) },
+                    label = { Text("YouTube Template", fontSize = 12.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         containerColor = Color(0xFF26262A),
                         labelColor = Color.White

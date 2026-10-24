@@ -70,6 +70,18 @@ fun MainScreen(
     var showGlobalCookiesModal by remember { mutableStateOf(false) }
     var showGlobalMediaEngineDialog by remember { mutableStateOf(false) }
     
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var isInstallerDone by remember {
+        mutableStateOf(com.example.data.MediaProcessingEngine.isInstallerCompleted(context))
+    }
+
+    if (!isInstallerDone) {
+        PreLaunchEngineInstallerScreen(
+            onOpenApk = { isInstallerDone = true }
+        )
+        return
+    }
+
     val savedTracks by playerViewModel.savedTracks.collectAsState()
     val playlists by PlaylistRepository.playlists.collectAsState()
     val downloadedTracks by com.example.data.AppDownloadManager.downloadedTracks.collectAsState()

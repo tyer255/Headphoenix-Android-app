@@ -77,24 +77,38 @@ object ApiClient {
         val effectiveToken = token ?: "spotiz_production_token"
 
         val requestBuilder = request.newBuilder()
-            .header("User-Agent", "SpotifyAndroidApp/1.0")
+            .header("User-Agent", com.example.data.CookieRepository.getUserAgent())
             .header("Accept", "application/json")
             .header("x-session-id", sessionId)
             .header("Authorization", "Bearer $effectiveToken")
+
+        val cookieHeader = com.example.data.CookieRepository.getCookieHeader()
+        if (!cookieHeader.isNullOrBlank()) {
+            requestBuilder.header("Cookie", cookieHeader)
+        }
 
         chain.proceed(requestBuilder.build())
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.BASIC
     }
 
+    val fastHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(16, 5, TimeUnit.MINUTES))
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
     private val okHttpClient = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(16, 5, TimeUnit.MINUTES))
         .addInterceptor(extractorRouteInterceptor)
         .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val retrofit = Retrofit.Builder()

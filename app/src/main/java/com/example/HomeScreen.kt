@@ -102,6 +102,7 @@ fun HomeScreen(
     var showCookiesModal by remember { mutableStateOf(false) }
     var showMediaEngineDialog by remember { mutableStateOf(false) }
     val cookieConfig by com.example.data.CookieRepository.cookieConfig.collectAsState()
+    val engineStatus by com.example.data.MediaProcessingEngine.engineStatus.collectAsState()
 
     // Followed Artists local state
     var followedArtistIds by remember {
@@ -579,40 +580,62 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Cookies Option at Top of App
-                    IconButton(
-                        onClick = { showCookiesModal = true },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        BadgedBox(
-                            badge = {
-                                if (cookieConfig.isEnabled && cookieConfig.rawCookie.isNotBlank()) {
-                                    Badge(
-                                        containerColor = GreenPrimary,
-                                        modifier = Modifier.size(8.dp)
-                                    )
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Key,
-                                contentDescription = "Authorized Cookies",
-                                tint = if (cookieConfig.isEnabled && cookieConfig.rawCookie.isNotBlank()) GreenPrimary else Color(0xFFC0C0C4),
-                                modifier = Modifier.size(20.dp)
+                    // Cookies Option at Upper Side of APK
+                    val cookiesActive = cookieConfig.isEnabled && cookieConfig.rawCookie.isNotBlank()
+                    Row(
+                        modifier = Modifier
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(17.dp))
+                            .background(if (cookiesActive) Color(0xFF142E1F) else Color(0xFF232328))
+                            .border(
+                                1.dp,
+                                if (cookiesActive) GreenPrimary else Color(0xFF3E3E46),
+                                RoundedCornerShape(17.dp)
                             )
-                        }
+                            .clickable { showCookiesModal = true }
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = "Cookies",
+                            tint = if (cookiesActive) GreenPrimary else Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Cookies",
+                            color = if (cookiesActive) GreenPrimary else Color.White,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
-                    // Media Engine & Update Option
-                    IconButton(
-                        onClick = { showMediaEngineDialog = true },
-                        modifier = Modifier.size(36.dp)
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // FFmpeg & yt-dlp Setup/Update Option at Upper Side of APK with live %
+                    Row(
+                        modifier = Modifier
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(17.dp))
+                            .background(if (engineStatus.ffmpegPercent >= 100) Color(0xFF142E1F) else Color(0xFF232328))
+                            .border(1.dp, GreenPrimary, RoundedCornerShape(17.dp))
+                            .clickable { showMediaEngineDialog = true }
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Tune,
-                            contentDescription = "Media Engine",
-                            tint = Color(0xFFC0C0C4),
-                            modifier = Modifier.size(20.dp)
+                            contentDescription = "FFmpeg & yt-dlp",
+                            tint = GreenPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "FFmpeg ${engineStatus.ffmpegPercent}%",
+                            color = if (engineStatus.ffmpegPercent >= 100) GreenPrimary else Color.White,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }

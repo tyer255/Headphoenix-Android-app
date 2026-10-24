@@ -70,9 +70,11 @@ class SearchViewModel : ViewModel() {
         searchJob?.cancel()
         if (query.length > 1) {
             searchJob = viewModelScope.launch {
-                delay(300) // debounce
-                val suggestions = repository.getSearchSuggestions(query)
-                _searchSuggestions.value = suggestions
+                delay(120) // fast 120ms debounce for instant search feel
+                launch {
+                    val suggestions = repository.getSearchSuggestions(query)
+                    _searchSuggestions.value = suggestions
+                }
                 performSearch(query)
             }
         } else {
