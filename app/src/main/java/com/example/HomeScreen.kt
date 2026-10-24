@@ -99,6 +99,9 @@ fun HomeScreen(
     val isOnline by com.example.util.NetworkMonitor.isOnline.collectAsState()
 
     var selectedFilter by remember { mutableStateOf("All") }
+    var showCookiesModal by remember { mutableStateOf(false) }
+    var showMediaEngineDialog by remember { mutableStateOf(false) }
+    val cookieConfig by com.example.data.CookieRepository.cookieConfig.collectAsState()
 
     // Followed Artists local state
     var followedArtistIds by remember {
@@ -573,6 +576,191 @@ fun HomeScreen(
                         isSelected = selectedFilter == "Podcasts",
                         onClick = { selectedFilter = "Podcasts" }
                     )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Cookies Option at Top of App
+                    IconButton(
+                        onClick = { showCookiesModal = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                if (cookieConfig.isEnabled && cookieConfig.rawCookie.isNotBlank()) {
+                                    Badge(
+                                        containerColor = GreenPrimary,
+                                        modifier = Modifier.size(8.dp)
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Key,
+                                contentDescription = "Authorized Cookies",
+                                tint = if (cookieConfig.isEnabled && cookieConfig.rawCookie.isNotBlank()) GreenPrimary else Color(0xFFC0C0C4),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Media Engine & Update Option
+                    IconButton(
+                        onClick = { showMediaEngineDialog = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "Media Engine",
+                            tint = Color(0xFFC0C0C4),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // 1.2. SPOTIFY 2-COLUMN 6-TILE QUICK ACCESS GRID (DOPAMINE, RAP 91 Hindi, Gehra Hua Radio, Husn, Tauba Tauba, Arz Kiya Hai)
+            if (selectedFilter != "Podcasts") {
+                item(key = "spotify_top_quick_grid") {
+                    val quickGridTracks = remember {
+                        listOf(
+                            TrackDto(
+                                id = "track_dopamine_guru_randhawa",
+                                title = "DOPAMINE",
+                                artist = "Guru Randhawa",
+                                album = "G Thing",
+                                duration = 179,
+                                images = ImagesDto(
+                                    small = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&auto=format&fit=crop&q=80",
+                                    medium = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop&q=80",
+                                    large = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1000&auto=format&fit=crop&q=80"
+                                )
+                            ),
+                            TrackDto(
+                                id = "seed_rap91_hindi",
+                                title = "RAP 91 Hindi",
+                                artist = "KR\$NA, Raftaar, DIVINE",
+                                album = "Rap 91",
+                                duration = 204,
+                                images = ImagesDto(
+                                    small = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80",
+                                    medium = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80",
+                                    large = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80"
+                                )
+                            ),
+                            TrackDto(
+                                id = "seed_gehra_hua_radio",
+                                title = "Gehra Hua Radio",
+                                artist = "Arijit Singh, Pritam",
+                                album = "Headphonix Radio",
+                                duration = 235,
+                                images = ImagesDto(
+                                    small = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80",
+                                    medium = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80",
+                                    large = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80"
+                                )
+                            ),
+                            TrackDto(
+                                id = "seed_husn_anuv",
+                                title = "Husn",
+                                artist = "Anuv Jain",
+                                album = "Husn - Single",
+                                duration = 218,
+                                images = ImagesDto(
+                                    small = "https://cdn-images.dzcdn.net/images/cover/bdcf70737dc185ef7ec866fb29591137/500x500-000000-80-0-0.jpg",
+                                    medium = "https://cdn-images.dzcdn.net/images/cover/bdcf70737dc185ef7ec866fb29591137/500x500-000000-80-0-0.jpg",
+                                    large = "https://cdn-images.dzcdn.net/images/cover/bdcf70737dc185ef7ec866fb29591137/1000x1000-000000-80-0-0.jpg"
+                                )
+                            ),
+                            TrackDto(
+                                id = "seed_tauba_aujla",
+                                title = "Tauba Tauba",
+                                artist = "Karan Aujla",
+                                album = "Bad Newz",
+                                duration = 207,
+                                images = ImagesDto(
+                                    small = "https://cdn-images.dzcdn.net/images/cover/ff6bb1420d9fcd2671cf6f86c2e49658/500x500-000000-80-0-0.jpg",
+                                    medium = "https://cdn-images.dzcdn.net/images/cover/ff6bb1420d9fcd2671cf6f86c2e49658/500x500-000000-80-0-0.jpg",
+                                    large = "https://cdn-images.dzcdn.net/images/cover/ff6bb1420d9fcd2671cf6f86c2e49658/1000x1000-000000-80-0-0.jpg"
+                                )
+                            ),
+                            TrackDto(
+                                id = "hero_arz_kiya_hai",
+                                title = "Arz Kiya Hai",
+                                artist = "Anuv Jain",
+                                album = "Coke Studio Bharat",
+                                duration = 240,
+                                images = ImagesDto(
+                                    small = "https://cdn-images.dzcdn.net/images/cover/269ee6cfef6451ce303541fae19f8fb6/250x250-000000-80-0-0.jpg",
+                                    medium = "https://cdn-images.dzcdn.net/images/cover/269ee6cfef6451ce303541fae19f8fb6/500x500-000000-80-0-0.jpg",
+                                    large = "https://cdn-images.dzcdn.net/images/cover/269ee6cfef6451ce303541fae19f8fb6/1000x1000-000000-80-0-0.jpg"
+                                )
+                            )
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (rowIndex in 0 until 3) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                for (colIndex in 0 until 2) {
+                                    val itemIdx = rowIndex * 2 + colIndex
+                                    val gridTrack = quickGridTracks[itemIdx]
+                                    val isTrackActive = currentTrack?.id == gridTrack.id
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(54.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                if (isTrackActive) Color(0xFF2A2E35) else Color(0xFF1E1E24)
+                                            )
+                                            .clickable {
+                                                playerViewModel.playTrack(gridTrack, quickGridTracks)
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        AsyncImage(
+                                            model = gridTrack.images?.small ?: gridTrack.images?.medium,
+                                            contentDescription = gridTrack.title,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .background(Color(0xFF2A2A2A))
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = gridTrack.title,
+                                            color = if (isTrackActive) Color(0xFF1ED760) else Color.White,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            lineHeight = 15.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (isTrackActive && isPlaying) {
+                                            com.example.ui.SpotifyEqualizerIcon(
+                                                isPlaying = true,
+                                                color = Color(0xFF1ED760),
+                                                modifier = Modifier
+                                                    .padding(end = 8.dp)
+                                                    .size(14.dp)
+                                            )
+                                        } else {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1163,6 +1351,12 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+        if (showCookiesModal) {
+            CookiesManagementModal(onDismiss = { showCookiesModal = false })
+        }
+        if (showMediaEngineDialog) {
+            MediaEngineSetupDialog(onDismiss = { showMediaEngineDialog = false })
         }
     }
 }

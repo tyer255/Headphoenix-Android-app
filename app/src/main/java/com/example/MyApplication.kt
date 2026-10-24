@@ -18,6 +18,8 @@ class MyApplication : Application(), ImageLoaderFactory {
             Log.e("MyApplication", "CRASH in thread ${thread.name}", throwable)
             defaultHandler?.uncaughtException(thread, throwable)
         }
+        com.example.data.CookieRepository.initialize(this)
+        com.example.data.MediaProcessingEngine.init(this)
         com.example.data.PlaylistRepository.init(this)
         com.example.data.PlaybackHistoryRepository.init(this)
         com.example.data.AppDownloadManager.initCompleted(this)

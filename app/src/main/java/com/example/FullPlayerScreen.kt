@@ -90,6 +90,9 @@ fun FullPlayerScreen(
     onClose: () -> Unit,
     onNavigateToArtist: ((String) -> Unit)? = null
 ) {
+    androidx.activity.compose.BackHandler {
+        onClose()
+    }
     val track by viewModel.currentTrack.collectAsState()
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -373,7 +376,7 @@ fun FullPlayerScreen(
                             Icon(
                                 imageVector = if (userCanvasEnabled) Icons.Filled.Image else Icons.Filled.Videocam,
                                 contentDescription = if (userCanvasEnabled) "Show Album Art" else "Show Canvas Video",
-                                tint = if (userCanvasEnabled) Color(0xFF1DB954) else Color.White,
+                                tint = if (userCanvasEnabled) Color(0xFF1ED760) else Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -392,17 +395,31 @@ fun FullPlayerScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Album Artwork (Spotify square card with 8dp rounded corners)
+            // Album Artwork (Spotify square card with 12dp rounded corners & spring play/pause scale)
+            val artworkScale by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (isPlaying) 1f else 0.94f,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                ),
+                label = "artworkPlayScale"
+            )
             if (!isCanvasActive) {
-                com.example.ui.SongArtworkImage(
-                    track = track,
-                    title = track?.title,
-                    artist = track?.artist,
-                    shape = RoundedCornerShape(8.dp),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(1f)
-                )
+                        .aspectRatio(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    com.example.ui.SongArtworkImage(
+                        track = track,
+                        title = track?.title,
+                        artist = track?.artist,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxSize(artworkScale)
+                    )
+                }
             } else {
                 Spacer(modifier = Modifier.fillMaxWidth().aspectRatio(1f))
             }
@@ -539,13 +556,25 @@ Row(verticalAlignment = Alignment.CenterVertically) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { viewModel.toggleShuffle() }) {
-                    Icon(
-                        imageVector = Icons.Filled.Shuffle,
-                        contentDescription = "Shuffle",
-                        tint = if (isShuffle) Color(0xFF1DB954) else Color(0xFFB3B3B3),
-                        modifier = Modifier.size(24.dp)
-                    )
+                Box(contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { viewModel.toggleShuffle() }) {
+                        Icon(
+                            imageVector = Icons.Filled.Shuffle,
+                            contentDescription = "Shuffle",
+                            tint = if (isShuffle) Color(0xFF1ED760) else Color(0xFFB3B3B3),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    if (isShuffle) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .offset(y = (-4).dp)
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1ED760))
+                        )
+                    }
                 }
 
                 IconButton(onClick = { viewModel.skipPrevious() }) {
@@ -557,10 +586,18 @@ Row(verticalAlignment = Alignment.CenterVertically) {
                     )
                 }
 
-                // Spotify White Big Play/Pause Button
+                // Spotify White Big Play/Pause Button with tactile spring bounce
+                val playScale by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (isPlaying) 1f else 0.96f,
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+                    ),
+                    label = "fullPlayerPlayScale"
+                )
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(64.dp * playScale)
                         .clip(CircleShape)
                         .background(Color.White)
                         .clickable { viewModel.togglePlayPause() }
@@ -592,13 +629,25 @@ Row(verticalAlignment = Alignment.CenterVertically) {
                     )
                 }
 
-                IconButton(onClick = { viewModel.toggleRepeat() }) {
-                    Icon(
-                        imageVector = if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                        contentDescription = "Repeat",
-                        tint = if (repeatMode > 0) Color(0xFF1DB954) else Color(0xFFB3B3B3),
-                        modifier = Modifier.size(24.dp)
-                    )
+                Box(contentAlignment = Alignment.Center) {
+                    IconButton(onClick = { viewModel.toggleRepeat() }) {
+                        Icon(
+                            imageVector = if (repeatMode == 2) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = "Repeat",
+                            tint = if (repeatMode > 0) Color(0xFF1ED760) else Color(0xFFB3B3B3),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    if (repeatMode > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .offset(y = (-4).dp)
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF1ED760))
+                        )
+                    }
                 }
             }
 
@@ -1347,11 +1396,30 @@ fun SmoothSpotifyProgressBar(
     val curSec = if (isDragging) (dragProgress * safeDuration).toInt() else positionSec.toInt()
     val totalSec = safeDuration.toInt()
 
+    val activeTrackColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isDragging) Color(0xFF1ED760) else Color.White,
+        animationSpec = androidx.compose.animation.core.tween(150),
+        label = "scrubberTrackColor"
+    )
+    val trackHeightDp by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isDragging) 4.dp else 2.dp,
+        animationSpec = androidx.compose.animation.core.tween(150),
+        label = "scrubberTrackHeight"
+    )
+    val thumbDiameterDp by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (isDragging) 14.dp else 10.dp,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+        ),
+        label = "scrubberThumbSize"
+    )
+
     Column(modifier = modifier.fillMaxWidth()) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp) // Accessible touch target area
+                .height(26.dp) // Accessible touch target area
                 .pointerInput(safeDuration) {
                     detectTapGestures { offset ->
                         val newProgress = (offset.x / size.width).coerceIn(0f, 1f)
@@ -1381,26 +1449,26 @@ fun SmoothSpotifyProgressBar(
             contentAlignment = Alignment.CenterStart
         ) {
             val widthPx = constraints.maxWidth.toFloat()
-            val thumbRadiusDp = 5.dp // 10.dp diameter dot
+            val thumbRadiusDp = thumbDiameterDp / 2
             val thumbRadiusPx = with(LocalDensity.current) { thumbRadiusDp.toPx() }
 
-            // Inactive track line: Plain 2dp smooth line
+            // Inactive track line: Plain smooth line (#4D4D4D / White 25%)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp)
-                    .background(Color.White.copy(alpha = 0.25f), RoundedCornerShape(1.dp))
+                    .height(trackHeightDp)
+                    .background(Color.White.copy(alpha = 0.25f), RoundedCornerShape(2.dp))
             )
 
-            // Active track line: Plain 2dp smooth line in white
+            // Active track line: Turns Spotify green (#1ED760) while scrubbing, solid white normally
             Box(
                 modifier = Modifier
                     .fillMaxWidth(currentProgress)
-                    .height(2.dp)
-                    .background(Color.White, RoundedCornerShape(1.dp))
+                    .height(trackHeightDp)
+                    .background(activeTrackColor, RoundedCornerShape(2.dp))
             )
 
-            // Dot Thumb: 10dp solid white circle centered on the line
+            // Dot Thumb: Solid white circle centered on the line, enlarges on drag
             val thumbOffsetDp = with(LocalDensity.current) {
                 ((currentProgress * widthPx) - thumbRadiusPx).coerceIn(0f, (widthPx - thumbRadiusPx * 2).coerceAtLeast(0f)).toDp()
             }
@@ -1408,7 +1476,7 @@ fun SmoothSpotifyProgressBar(
             Box(
                 modifier = Modifier
                     .offset(x = thumbOffsetDp)
-                    .size(10.dp)
+                    .size(thumbDiameterDp)
                     .clip(CircleShape)
                     .background(Color.White)
             )
@@ -1424,7 +1492,8 @@ fun SmoothSpotifyProgressBar(
             Text(
                 text = "${curSec / 60}:${(curSec % 60).toString().padStart(2, '0')}",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFB3B3B3),
+                color = if (isDragging) Color(0xFF1ED760) else Color(0xFFB3B3B3),
+                fontWeight = if (isDragging) FontWeight.Bold else FontWeight.Normal,
                 fontSize = 12.sp
             )
             Text(

@@ -39,7 +39,8 @@ import com.example.ui.FavoriteRed
 fun MiniPlayer(
     viewModel: PlayerViewModel,
     onOpenFullScreen: () -> Unit,
-    onOpenLyrics: (() -> Unit)? = null
+    onOpenLyrics: (() -> Unit)? = null,
+    onOpenDevices: (() -> Unit)? = null
 ) {
     val track by viewModel.currentTrack.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -88,7 +89,7 @@ fun MiniPlayer(
             }
             .clickable { onOpenFullScreen() }
     ) {
-        // Continuous top thin progress bar indicator with glowing gradient
+        // Continuous top thin progress bar indicator with glowing Spotify green gradient
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -102,7 +103,7 @@ fun MiniPlayer(
                     .fillMaxHeight()
                     .background(
                         Brush.horizontalGradient(
-                            colors = listOf(Color(0xFF10B981), Color(0xFF34D399))
+                            colors = listOf(Color(0xFF1ED760), Color(0xFF1FDF64))
                         )
                     )
             )
@@ -119,7 +120,10 @@ fun MiniPlayer(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF282828)),
+                    .background(Color(0xFF282828))
+                    .clickable {
+                        onOpenFullScreen()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
@@ -151,7 +155,7 @@ fun MiniPlayer(
                             modifier = Modifier
                                 .size((6 * scale).dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF10B981))
+                                .background(Color(0xFF1ED760))
                         )
                     }
                 }
@@ -189,7 +193,7 @@ fun MiniPlayer(
                 Spacer(modifier = Modifier.height(1.dp))
 
                 Text(
-                    text = track?.artist ?: "Spotify",
+                    text = track?.artist ?: "Headphonix",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFB3B3B3),
                     fontSize = 11.sp,
@@ -198,21 +202,21 @@ fun MiniPlayer(
                 )
             }
 
-            // Right: Quick Action Controls (Devices, Lyrics, Like/Save, Play/Pause)
+            // Right: Quick Action Controls (Connect Devices, Lyrics, Like/Save, Play/Pause)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Spotify Connect device icon
+                // Opens the Spotify Connect Devices Bottom Sheet
                 IconButton(
-                    onClick = { onOpenFullScreen() },
+                    onClick = { onOpenDevices?.invoke() ?: onOpenFullScreen() },
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_devices),
-                        contentDescription = "Devices",
+                        contentDescription = "Connect to a device",
                         tint = Color(0xFFB3B3B3),
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 

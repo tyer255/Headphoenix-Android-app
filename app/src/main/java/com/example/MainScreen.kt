@@ -66,6 +66,9 @@ fun MainScreen(
     var globalCreatePlaylistFor by remember { mutableStateOf<com.example.data.remote.models.TrackDto?>(null) }
     var globalShareTrackFor by remember { mutableStateOf<com.example.data.remote.models.TrackDto?>(null) }
     var showCreatePlaylistSheetOnly by remember { mutableStateOf(false) }
+    var showGlobalDevicesSheet by remember { mutableStateOf(false) }
+    var showGlobalCookiesModal by remember { mutableStateOf(false) }
+    var showGlobalMediaEngineDialog by remember { mutableStateOf(false) }
     
     val savedTracks by playerViewModel.savedTracks.collectAsState()
     val playlists by PlaylistRepository.playlists.collectAsState()
@@ -105,6 +108,12 @@ fun MainScreen(
                 },
                 onOpenCreatePlaylist = {
                     showCreatePlaylistSheetOnly = true
+                },
+                onOpenCookies = {
+                    showGlobalCookiesModal = true
+                },
+                onOpenMediaEngine = {
+                    showGlobalMediaEngineDialog = true
                 },
                 onCloseDrawer = {
                     scope.launch { drawerState.close() }
@@ -186,6 +195,8 @@ fun MainScreen(
                             onNavigateToPlaylist = { playlistId -> navController.navigate("playlist/$playlistId") },
                             onOpenProfile = { scope.launch { drawerState.open() } },
                             onNavigateToExtractor = { navController.navigate("playlist-extractor") },
+                            onNavigateToSearch = { navController.navigate("search") },
+                            onNavigateToBlend = { navController.navigate("blend-setup") },
                             playerViewModel = playerViewModel
                         )
                     }
@@ -317,7 +328,8 @@ fun MainScreen(
                         if (currentTrack != null) {
                             MiniPlayer(
                                 viewModel = playerViewModel,
-                                onOpenFullScreen = { showFullScreenPlayer = true }
+                                onOpenFullScreen = { showFullScreenPlayer = true },
+                                onOpenDevices = { showGlobalDevicesSheet = true }
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                         }
@@ -364,6 +376,10 @@ fun MainScreen(
                 onExtractPlaylistClick = {
                     showCreateSheet = false
                     showPlaylistSyncModal = true
+                },
+                onBlendClick = {
+                    showCreateSheet = false
+                    navController.navigate("blend-setup")
                 }
             )
         }
@@ -459,6 +475,21 @@ fun MainScreen(
                     navController.navigate("playlist/$newPlId")
                 }
             )
+        }
+
+        if (showGlobalDevicesSheet) {
+            DevicesSheet(
+                playerViewModel = playerViewModel,
+                onDismiss = { showGlobalDevicesSheet = false }
+            )
+        }
+
+        if (showGlobalCookiesModal) {
+            CookiesManagementModal(onDismiss = { showGlobalCookiesModal = false })
+        }
+
+        if (showGlobalMediaEngineDialog) {
+            MediaEngineSetupDialog(onDismiss = { showGlobalMediaEngineDialog = false })
         }
     }
 }

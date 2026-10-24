@@ -48,10 +48,14 @@ class YouTubeAudioEngine(private val context: Context) {
             val settings = wv.settings
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.databaseEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.cacheMode = WebSettings.LOAD_DEFAULT
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.allowFileAccess = true
+            settings.allowContentAccess = true
             settings.userAgentString =
-                "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
+                "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
 
             wv.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -112,7 +116,7 @@ class YouTubeAudioEngine(private val context: Context) {
                 @JavascriptInterface
                 fun onPlayerError(errorCode: Int) {
                     mainHandler.post {
-                        Log.e(TAG, "YouTube player error: $errorCode")
+                        Log.w(TAG, "YouTube player fallback triggered (code: $errorCode)")
                         onErrorListener?.invoke(errorCode)
                     }
                 }
@@ -120,7 +124,7 @@ class YouTubeAudioEngine(private val context: Context) {
 
             webView = wv
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize YouTube WebView engine", e)
+            Log.w(TAG, "Failed to initialize YouTube WebView engine", e)
         }
     }
 
@@ -132,9 +136,9 @@ class YouTubeAudioEngine(private val context: Context) {
         mainHandler.post {
             try {
                 val html = buildPlayerHtml(videoId, startSeconds)
-                webView?.loadDataWithBaseURL("https://spotify2.ai.studio", html, "text/html", "UTF-8", null)
+                webView?.loadDataWithBaseURL("https://www.youtube-nocookie.com", html, "text/html", "UTF-8", null)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load YouTube video $videoId", e)
+                Log.w(TAG, "Failed to load YouTube video $videoId", e)
             }
         }
     }
@@ -185,9 +189,9 @@ class YouTubeAudioEngine(private val context: Context) {
             <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta name="referrer" content="strict-origin-when-cross-origin">
                 <style>
-                    body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
-                    #player { width: 100%; height: 100%; }
+                    html, body, #player { width: 100%; height: 100%; margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
                 </style>
                 <script src="https://www.youtube.com/iframe_api"></script>
             </head>
@@ -201,6 +205,7 @@ class YouTubeAudioEngine(private val context: Context) {
                         player = new YT.Player('player', {
                             height: '100%',
                             width: '100%',
+                            host: 'https://www.youtube-nocookie.com',
                             videoId: '$videoId',
                             playerVars: {
                                 'autoplay': 1,
@@ -210,8 +215,10 @@ class YouTubeAudioEngine(private val context: Context) {
                                 'modestbranding': 1,
                                 'playsinline': 1,
                                 'rel': 0,
+                                'enablejsapi': 1,
                                 'start': Math.floor($startSeconds),
-                                'origin': 'https://spotify2.ai.studio'
+                                'origin': 'https://www.youtube-nocookie.com',
+                                'widget_referrer': 'https://www.youtube-nocookie.com'
                             },
                             events: {
                                 'onReady': onPlayerReady,

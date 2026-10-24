@@ -1,12 +1,20 @@
 package com.example
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -35,6 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,36 +62,36 @@ sealed class LibraryDisplayItem(
     val targetRoute: String,
     val isPinned: Boolean = false
 ) {
-    class LikedSongs(val count: Int) : LibraryDisplayItem(
+    class LikedSongs(val count: Int, isPinned: Boolean = true) : LibraryDisplayItem(
         id = "liked-songs",
         title = "Liked Songs",
         subtitle = "Playlist • $count songs",
         targetRoute = "playlist/liked-songs",
-        isPinned = true
+        isPinned = isPinned
     )
 
-    class DownloadedSongs(val count: Int) : LibraryDisplayItem(
+    class DownloadedSongs(val count: Int, isPinned: Boolean = true) : LibraryDisplayItem(
         id = "downloaded-tracks",
         title = "Downloaded Songs",
         subtitle = "Playlist • $count songs (Offline)",
         targetRoute = "playlist/downloaded-tracks",
-        isPinned = true
+        isPinned = isPinned
     )
 
-    class UserPlaylistItem(val playlist: Playlist) : LibraryDisplayItem(
+    class UserPlaylistItem(val playlist: Playlist, isPinned: Boolean = false) : LibraryDisplayItem(
         id = playlist.id,
         title = playlist.title,
         subtitle = "Playlist • ${playlist.owner}${if (playlist.tracks.isNotEmpty()) " • ${playlist.tracks.size} songs" else ""}",
         targetRoute = "playlist/${playlist.id}",
-        isPinned = false
+        isPinned = isPinned
     )
 
-    class DownloadedTrackItem(val track: TrackDto) : LibraryDisplayItem(
+    class DownloadedTrackItem(val track: TrackDto, isPinned: Boolean = false) : LibraryDisplayItem(
         id = track.id,
         title = track.title,
-        subtitle = "${track.artist} • Offline",
+        subtitle = "Song • ${track.artist} • Offline",
         targetRoute = "track/${track.id}",
-        isPinned = false
+        isPinned = isPinned
     )
 
     class ActionItem(
@@ -106,6 +115,8 @@ fun LibraryScreen(
     onNavigateToPlaylist: (String) -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onNavigateToExtractor: () -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
+    onNavigateToBlend: () -> Unit = {},
     playerViewModel: PlayerViewModel? = null
 ) {
     val context = LocalContext.current
@@ -116,35 +127,71 @@ fun LibraryScreen(
 
     var isGridView by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") } // All, Playlists, Artists, Albums, Podcasts, Downloaded
-    var sortOrder by remember { mutableStateOf("Recents") } // Recents, Recently Added, Alphabetical, Creator
+    var selectedSubFilter by remember { mutableStateOf("All") } // All, By you, By Headphonix
+    var sortOrder by remember { mutableStateOf("Recents") } // Recents, Recently added, Alphabetical, Creator
     var isSortMenuOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearching by remember { mutableStateOf(false) }
+
+    // Pinned item IDs state (Spotify Android supports pinning up to 4-20 items to top of Library)
+    var pinnedIds by remember { mutableStateOf(setOf("liked-songs", "downloaded-tracks")) }
+
+    // Long-press / options sheet state for Library items
+    var selectedItemForOptions by remember { mutableStateOf<LibraryDisplayItem?>(null) }
+    var playlistPendingDelete by remember { mutableStateOf<Playlist?>(null) }
 
     var showCreateBottomSheet by remember { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var showPlaylistSyncModal by remember { mutableStateOf(false) }
 
-    // Build items based on filters and search
-    val displayItems = remember(playlists, likedTracks, downloadedTracks, selectedFilter, searchQuery, sortOrder) {
+    // Back navigation handler for in-library search or active filter chips
+    BackHandler(enabled = isSearching || selectedFilter != "All") {
+        if (isSearching) {
+            isSearching = false
+            searchQuery = ""
+        } else if (selectedFilter != "All") {
+            selectedFilter = "All"
+            selectedSubFilter = "All"
+        }
+    }
+
+    // Build items based on filters, sub-filters, pin state, and search
+    val displayItems = remember(
+        playlists,
+        likedTracks,
+        downloadedTracks,
+        selectedFilter,
+        selectedSubFilter,
+        searchQuery,
+        sortOrder,
+        pinnedIds
+    ) {
         val items = mutableListOf<LibraryDisplayItem>()
 
         when (selectedFilter) {
             "Downloaded" -> {
-                items.add(LibraryDisplayItem.DownloadedSongs(downloadedTracks.size))
+                items.add(LibraryDisplayItem.DownloadedSongs(downloadedTracks.size, pinnedIds.contains("downloaded-tracks")))
                 downloadedTracks.forEach { track ->
-                    items.add(LibraryDisplayItem.DownloadedTrackItem(track))
+                    items.add(LibraryDisplayItem.DownloadedTrackItem(track, pinnedIds.contains(track.id)))
                 }
             }
             "Playlists" -> {
-                if (likedTracks.isNotEmpty()) {
-                    items.add(LibraryDisplayItem.LikedSongs(likedTracks.size))
-                }
-                if (downloadedTracks.isNotEmpty()) {
-                    items.add(LibraryDisplayItem.DownloadedSongs(downloadedTracks.size))
+                if (selectedSubFilter == "All" || selectedSubFilter == "By you") {
+                    items.add(LibraryDisplayItem.LikedSongs(likedTracks.size, pinnedIds.contains("liked-songs")))
+                    if (downloadedTracks.isNotEmpty()) {
+                        items.add(LibraryDisplayItem.DownloadedSongs(downloadedTracks.size, pinnedIds.contains("downloaded-tracks")))
+                    }
                 }
                 playlists.forEach { pl ->
-                    items.add(LibraryDisplayItem.UserPlaylistItem(pl))
+                    val isByYou = pl.isCustom || pl.owner.equals(userProfile.name, ignoreCase = true) || pl.owner.equals("You", ignoreCase = true)
+                    val matchesSubFilter = when (selectedSubFilter) {
+                        "By you" -> isByYou
+                        "By Headphonix" -> !isByYou
+                        else -> true
+                    }
+                    if (matchesSubFilter) {
+                        items.add(LibraryDisplayItem.UserPlaylistItem(pl, pinnedIds.contains(pl.id)))
+                    }
                 }
                 items.add(
                     LibraryDisplayItem.ActionItem(
@@ -161,7 +208,7 @@ fun LibraryScreen(
                     LibraryDisplayItem.ActionItem(
                         actionId = "action_add_artists",
                         title = "Add artists",
-                        subtitle = "",
+                        subtitle = "Find artists you love",
                         isCircle = true,
                         iconVector = Icons.Filled.Add
                     )
@@ -175,7 +222,7 @@ fun LibraryScreen(
                     LibraryDisplayItem.ActionItem(
                         actionId = "action_add_podcasts",
                         title = "Add podcasts",
-                        subtitle = "",
+                        subtitle = "Browse shows & episodes",
                         isCircle = false,
                         iconVector = Icons.Filled.Add
                     )
@@ -183,12 +230,11 @@ fun LibraryScreen(
             }
             else -> {
                 // "All" filter
-                items.add(LibraryDisplayItem.LikedSongs(likedTracks.size))
-                items.add(LibraryDisplayItem.DownloadedSongs(downloadedTracks.size))
+                items.add(LibraryDisplayItem.LikedSongs(likedTracks.size, pinnedIds.contains("liked-songs")))
+                items.add(LibraryDisplayItem.DownloadedSongs(downloadedTracks.size, pinnedIds.contains("downloaded-tracks")))
                 playlists.forEach { pl ->
-                    items.add(LibraryDisplayItem.UserPlaylistItem(pl))
+                    items.add(LibraryDisplayItem.UserPlaylistItem(pl, pinnedIds.contains(pl.id)))
                 }
-                // Dedicated Library Action Items matching Screenshot_20260920_143545
                 items.add(
                     LibraryDisplayItem.ActionItem(
                         actionId = "action_playlist_sync",
@@ -211,15 +257,6 @@ fun LibraryScreen(
                     LibraryDisplayItem.ActionItem(
                         actionId = "action_add_podcasts",
                         title = "Add podcasts",
-                        subtitle = "",
-                        isCircle = false,
-                        iconVector = Icons.Filled.Add
-                    )
-                )
-                items.add(
-                    LibraryDisplayItem.ActionItem(
-                        actionId = "action_add_events",
-                        title = "Add events and venues",
                         subtitle = "",
                         isCircle = false,
                         iconVector = Icons.Filled.Add
@@ -237,7 +274,7 @@ fun LibraryScreen(
             }
         }
 
-        var filtered = if (searchQuery.isNotBlank()) {
+        val filtered = if (searchQuery.isNotBlank()) {
             items.filter {
                 it.title.contains(searchQuery, ignoreCase = true) ||
                 it.subtitle.contains(searchQuery, ignoreCase = true)
@@ -247,9 +284,23 @@ fun LibraryScreen(
         }
 
         when (sortOrder) {
-            "Alphabetical" -> filtered.sortedWith(compareBy({ !it.isPinned }, { it.title.lowercase() }))
-            "Creator" -> filtered.sortedWith(compareBy({ !it.isPinned }, { it.subtitle.lowercase() }))
-            else -> filtered
+            "Alphabetical" -> filtered.sortedWith(compareBy({ !it.isPinned }, { it is LibraryDisplayItem.ActionItem }, { it.title.lowercase() }))
+            "Creator" -> filtered.sortedWith(compareBy({ !it.isPinned }, { it is LibraryDisplayItem.ActionItem }, { it.subtitle.lowercase() }))
+            "Recently added" -> filtered.sortedWith(compareBy({ !it.isPinned }, { it is LibraryDisplayItem.ActionItem }))
+            else -> filtered.sortedWith(compareBy({ !it.isPinned }, { it is LibraryDisplayItem.ActionItem }))
+        }
+    }
+
+    val handleItemClick: (LibraryDisplayItem) -> Unit = { item ->
+        if (item is LibraryDisplayItem.ActionItem) {
+            when (item.actionId) {
+                "action_playlist_sync", "action_import_music" -> showPlaylistSyncModal = true
+                "action_add_artists", "action_add_podcasts" -> onNavigateToSearch()
+            }
+        } else if (item is LibraryDisplayItem.DownloadedTrackItem) {
+            playerViewModel?.playTrack(item.track, downloadedTracks)
+        } else if (item.targetRoute.startsWith("playlist/")) {
+            onNavigateToPlaylist(item.targetRoute.removePrefix("playlist/"))
         }
     }
 
@@ -271,7 +322,8 @@ fun LibraryScreen(
                     .size(34.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF282828))
-                    .clickable { onOpenProfile() },
+                    .clickable { onOpenProfile() }
+                    .testTag("library_profile_button"),
                 contentAlignment = Alignment.Center
             ) {
                 if (!userProfile.avatarUrl.isNullOrEmpty()) {
@@ -309,19 +361,23 @@ fun LibraryScreen(
                     isSearching = !isSearching
                     if (!isSearching) searchQuery = ""
                 },
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag("library_search_button")
             ) {
                 Icon(
                     Icons.Filled.Search,
                     contentDescription = "Search Library",
                     tint = if (isSearching) GreenPrimary else Color.White,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
 
             IconButton(
                 onClick = { showCreateBottomSheet = true },
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag("library_add_button")
             ) {
                 Icon(
                     Icons.Filled.Add,
@@ -344,7 +400,7 @@ fun LibraryScreen(
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF242424))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -357,12 +413,14 @@ fun LibraryScreen(
                 BasicTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
-                    cursorBrush = SolidColor(Color.White),
-                    modifier = Modifier.weight(1f),
+                    textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                    cursorBrush = SolidColor(GreenPrimary),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("library_search_input"),
                     decorationBox = { innerTextField ->
                         if (searchQuery.isEmpty()) {
-                            Text("Find in Your Library", color = Color(0xFFAAAAAA), fontSize = 13.sp)
+                            Text("Find in Your Library", color = Color(0xFFAAAAAA), fontSize = 14.sp)
                         }
                         innerTextField()
                     }
@@ -383,10 +441,11 @@ fun LibraryScreen(
             }
         }
 
-        // 3. Filter Pills Row
+        // 3. Filter Pills Row (with Spotify Android nested sub-chips when "Playlists" is selected)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
@@ -395,23 +454,32 @@ fun LibraryScreen(
                 item {
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF2A2A2A))
-                            .clickable { selectedFilter = "All" },
+                            .clickable {
+                                selectedFilter = "All"
+                                selectedSubFilter = "All"
+                            }
+                            .testTag("library_clear_filter_button"),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Filled.Close,
                             contentDescription = "Clear filter",
                             tint = Color.White,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
 
-            val pills = listOf("Playlists", "Artists", "Albums", "Podcasts", "Downloaded")
+            val pills = if (selectedFilter == "All") {
+                listOf("Playlists", "Artists", "Albums", "Podcasts", "Downloaded")
+            } else {
+                listOf(selectedFilter)
+            }
+
             items(pills, key = { it }) { pill ->
                 val isSelected = selectedFilter == pill
                 Box(
@@ -419,9 +487,15 @@ fun LibraryScreen(
                         .clip(RoundedCornerShape(20.dp))
                         .background(if (isSelected) GreenPrimary else Color(0xFF282828))
                         .clickable {
-                            selectedFilter = if (isSelected) "All" else pill
+                            if (isSelected) {
+                                selectedFilter = "All"
+                                selectedSubFilter = "All"
+                            } else {
+                                selectedFilter = pill
+                                selectedSubFilter = "All"
+                            }
                         }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
                 ) {
                     Text(
                         pill,
@@ -431,13 +505,36 @@ fun LibraryScreen(
                     )
                 }
             }
+
+            if (selectedFilter == "Playlists") {
+                val subPills = listOf("By you", "By Headphonix")
+                items(subPills, key = { "sub_$it" }) { subPill ->
+                    val isSubSelected = selectedSubFilter == subPill
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSubSelected) GreenPrimary else Color(0xFF282828))
+                            .clickable {
+                                selectedSubFilter = if (isSubSelected) "All" else subPill
+                            }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            subPill,
+                            color = if (isSubSelected) Color.Black else Color.White,
+                            fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
         }
 
         // 4. Sub-header (Recents Sort + Grid/List Toggle)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -447,6 +544,7 @@ fun LibraryScreen(
                     .clip(RoundedCornerShape(6.dp))
                     .clickable { isSortMenuOpen = true }
                     .padding(vertical = 4.dp, horizontal = 4.dp)
+                    .testTag("library_sort_button")
             ) {
                 Icon(
                     Icons.Filled.SwapVert,
@@ -454,7 +552,7 @@ fun LibraryScreen(
                     tint = Color.LightGray,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     sortOrder,
                     color = Color.White,
@@ -465,10 +563,12 @@ fun LibraryScreen(
 
             IconButton(
                 onClick = { isGridView = !isGridView },
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag("library_view_toggle_button")
             ) {
                 Icon(
-                    imageVector = if (isGridView) Icons.Filled.List else Icons.Filled.GridView,
+                    imageVector = if (isGridView) Icons.Filled.FormatListBulleted else Icons.Outlined.GridView,
                     contentDescription = if (isGridView) "Switch to List View" else "Switch to Grid View",
                     tint = Color.LightGray,
                     modifier = Modifier.size(18.dp)
@@ -476,9 +576,8 @@ fun LibraryScreen(
             }
         }
 
-        // 5. Library Content Area
+        // 5. Library Content Area with smooth AnimatedContent between List and Grid view
         if (displayItems.isEmpty()) {
-            // Empty State
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -507,7 +606,11 @@ fun LibraryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        if (selectedFilter == "Downloaded") "No downloaded songs yet" else "Your library is empty",
+                        when {
+                            selectedFilter == "Downloaded" -> "No downloaded songs yet"
+                            selectedFilter == "Albums" -> "You haven't saved any albums yet"
+                            else -> "Your library is empty"
+                        },
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -516,15 +619,19 @@ fun LibraryScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        if (selectedFilter == "Downloaded")
-                            "Tap the download icon on any song or playlist to save it for offline listening."
-                        else if (searchQuery.isNotEmpty())
-                            "No items found matching \"$searchQuery\""
-                        else
-                            "Playlists you create or like will show up here.",
+                        when {
+                            selectedFilter == "Downloaded" ->
+                                "Tap the download icon on any song or playlist to save it for offline listening."
+                            searchQuery.isNotEmpty() ->
+                                "No items found matching \"$searchQuery\""
+                            selectedFilter == "Albums" ->
+                                "Search for albums you love and save them to your library."
+                            else ->
+                                "Playlists you create or like will show up here."
+                        },
                         color = Color.Gray,
                         fontSize = 12.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -534,11 +641,19 @@ fun LibraryScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
-                            onClick = { showCreateBottomSheet = true },
+                            onClick = {
+                                if (selectedFilter == "Albums") onNavigateToSearch()
+                                else showCreateBottomSheet = true
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                             shape = RoundedCornerShape(24.dp)
                         ) {
-                            Text("Create playlist", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(
+                                if (selectedFilter == "Albums") "Explore albums" else "Create playlist",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
                         }
 
                         Button(
@@ -555,84 +670,91 @@ fun LibraryScreen(
                     }
                 }
             }
-        } else if (isGridView) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = com.example.ui.LocalBottomContentPadding.current, top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(displayItems, key = { it.id }) { item ->
-                    LibraryGridCard(
-                        item = item,
-                        onClick = {
-                            if (item is LibraryDisplayItem.ActionItem) {
-                                when (item.actionId) {
-                                    "action_playlist_sync", "action_import_music" -> showPlaylistSyncModal = true
-                                    "action_add_artists" -> android.widget.Toast.makeText(context, "Search to find artists to follow", android.widget.Toast.LENGTH_SHORT).show()
-                                    "action_add_podcasts" -> android.widget.Toast.makeText(context, "Explore podcasts in Search", android.widget.Toast.LENGTH_SHORT).show()
-                                    "action_add_events" -> android.widget.Toast.makeText(context, "Events and venues coming soon", android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            } else if (item is LibraryDisplayItem.DownloadedTrackItem) {
-                                playerViewModel?.playTrack(item.track, downloadedTracks)
-                            } else if (item.targetRoute.startsWith("playlist/")) {
-                                onNavigateToPlaylist(item.targetRoute.removePrefix("playlist/"))
-                            }
-                        }
-                    )
-                }
-            }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = com.example.ui.LocalBottomContentPadding.current, top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            AnimatedContent(
+                targetState = isGridView,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(200)) togetherWith fadeOut(animationSpec = tween(150))
+                },
+                label = "library_grid_list_transition",
                 modifier = Modifier.fillMaxSize()
-            ) {
-                items(displayItems, key = { it.id }) { item ->
-                    LibraryListRow(
-                        item = item,
-                        onClick = {
-                            if (item is LibraryDisplayItem.ActionItem) {
-                                when (item.actionId) {
-                                    "action_playlist_sync", "action_import_music" -> showPlaylistSyncModal = true
-                                    "action_add_artists" -> android.widget.Toast.makeText(context, "Search to find artists to follow", android.widget.Toast.LENGTH_SHORT).show()
-                                    "action_add_podcasts" -> android.widget.Toast.makeText(context, "Explore podcasts in Search", android.widget.Toast.LENGTH_SHORT).show()
-                                    "action_add_events" -> android.widget.Toast.makeText(context, "Events and venues coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            ) { gridMode ->
+                if (gridMode) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = com.example.ui.LocalBottomContentPadding.current,
+                            top = 8.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(displayItems, key = { it.id }) { item ->
+                            LibraryGridCard(
+                                item = item,
+                                onClick = { handleItemClick(item) },
+                                onLongClick = {
+                                    if (item !is LibraryDisplayItem.ActionItem) {
+                                        selectedItemForOptions = item
+                                    }
                                 }
-                            } else if (item is LibraryDisplayItem.DownloadedTrackItem) {
-                                playerViewModel?.playTrack(item.track, downloadedTracks)
-                            } else if (item.targetRoute.startsWith("playlist/")) {
-                                onNavigateToPlaylist(item.targetRoute.removePrefix("playlist/"))
-                            }
+                            )
                         }
-                    )
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = com.example.ui.LocalBottomContentPadding.current,
+                            top = 8.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(displayItems, key = { it.id }) { item ->
+                            LibraryListRow(
+                                item = item,
+                                onClick = { handleItemClick(item) },
+                                onLongClick = {
+                                    if (item !is LibraryDisplayItem.ActionItem) {
+                                        selectedItemForOptions = item
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 
-    // 6. Sort Bottom Sheet
+    // 6. Sort Bottom Sheet (Spotify Android "Sort by" modal sheet)
     if (isSortMenuOpen) {
         ModalBottomSheet(
             onDismissRequest = { isSortMenuOpen = false },
             containerColor = Color(0xFF282828),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFF535353)) }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
             ) {
                 Text(
                     "Sort by",
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
-                val sortOptions = listOf("Recents", "Recently Added", "Alphabetical", "Creator")
+                val sortOptions = listOf("Recents", "Recently added", "Alphabetical", "Creator")
                 sortOptions.forEach { opt ->
                     val isSelected = sortOrder == opt
                     Row(
@@ -643,20 +765,20 @@ fun LibraryScreen(
                                 sortOrder = opt
                                 isSortMenuOpen = false
                             }
-                            .padding(vertical = 14.dp, horizontal = 8.dp),
+                            .padding(vertical = 14.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             opt,
                             color = if (isSelected) GreenPrimary else Color.White,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 14.sp
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 15.sp
                         )
                         if (isSelected) {
                             Icon(
                                 Icons.Filled.Check,
-                                contentDescription = null,
+                                contentDescription = "Selected",
                                 tint = GreenPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -667,6 +789,198 @@ fun LibraryScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    // 7. Long-Press / Context Menu Bottom Sheet on Library Items (Spotify Android Library Context Menu)
+    selectedItemForOptions?.let { item ->
+        val isPinned = pinnedIds.contains(item.id)
+        ModalBottomSheet(
+            onDismissRequest = { selectedItemForOptions = null },
+            containerColor = Color(0xFF242424),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle(color = Color(0xFF535353)) }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = 20.dp)
+            ) {
+                // Item Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF333333)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when (item) {
+                            is LibraryDisplayItem.LikedSongs -> {
+                                CollectionArtworkImage(
+                                    tracks = likedTracks,
+                                    placeholderIcon = Icons.Filled.Favorite,
+                                    placeholderBackground = Color(0xFF450AF5),
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            is LibraryDisplayItem.DownloadedSongs -> {
+                                Icon(
+                                    Icons.Filled.Download,
+                                    contentDescription = null,
+                                    tint = GreenPrimary,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            is LibraryDisplayItem.UserPlaylistItem -> {
+                                CollectionArtworkImage(
+                                    tracks = item.playlist.tracks,
+                                    customCoverUrl = item.playlist.coverImage,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            is LibraryDisplayItem.DownloadedTrackItem -> {
+                                AsyncImage(
+                                    model = item.track.images?.medium ?: item.track.images?.small,
+                                    contentDescription = item.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            else -> {}
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.title,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = item.subtitle,
+                            color = Color(0xFFA7A7A7),
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    color = Color(0xFF383838),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                )
+
+                // Option 1: Pin / Unpin item
+                LibrarySheetOptionRow(
+                    icon = Icons.Filled.PushPin,
+                    iconTint = if (isPinned) GreenPrimary else Color(0xFFB3B3B3),
+                    label = if (isPinned) "Unpin playlist" else "Pin playlist",
+                    onClick = {
+                        pinnedIds = if (isPinned) {
+                            pinnedIds - item.id
+                        } else {
+                            pinnedIds + item.id
+                        }
+                        selectedItemForOptions = null
+                    }
+                )
+
+                // Option 2: Download / Offline
+                if (item is LibraryDisplayItem.UserPlaylistItem && item.playlist.tracks.isNotEmpty()) {
+                    LibrarySheetOptionRow(
+                        icon = Icons.Outlined.ArrowCircleDown,
+                        label = "Download",
+                        onClick = {
+                            item.playlist.tracks.forEach { track ->
+                                AppDownloadManager.downloadTrack(context, track)
+                            }
+                            Toast.makeText(context, "Downloading \"${item.title}\"", Toast.LENGTH_SHORT).show()
+                            selectedItemForOptions = null
+                        }
+                    )
+                }
+
+                // Option 3: Share
+                LibrarySheetOptionRow(
+                    icon = Icons.Outlined.Share,
+                    label = "Share",
+                    onClick = {
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Listen to ${item.title} on Headphonix!")
+                        }
+                        context.startActivity(Intent.createChooser(sendIntent, "Share ${item.title}"))
+                        selectedItemForOptions = null
+                    }
+                )
+
+                // Option 4: Delete playlist (with confirmation dialog)
+                if (item is LibraryDisplayItem.UserPlaylistItem) {
+                    LibrarySheetOptionRow(
+                        icon = Icons.Outlined.DeleteOutline,
+                        label = "Delete playlist",
+                        onClick = {
+                            playlistPendingDelete = item.playlist
+                            selectedItemForOptions = null
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // 8. Delete Playlist Confirmation Dialog (Spotify Android style)
+    playlistPendingDelete?.let { pl ->
+        AlertDialog(
+            onDismissRequest = { playlistPendingDelete = null },
+            containerColor = Color(0xFF282828),
+            shape = RoundedCornerShape(16.dp),
+            title = {
+                Text(
+                    text = "Delete ${pl.title}?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to delete this playlist from Your Library?",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        PlaylistRepository.deletePlaylist(pl.id)
+                        Toast.makeText(context, "Deleted \"${pl.title}\"", Toast.LENGTH_SHORT).show()
+                        playlistPendingDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text("Delete", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistPendingDelete = null }) {
+                    Text("Cancel", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 
     // Create Bottom Sheet / Dialog
@@ -684,6 +998,10 @@ fun LibraryScreen(
             onExtractPlaylistClick = {
                 showCreateBottomSheet = false
                 showPlaylistSyncModal = true
+            },
+            onBlendClick = {
+                showCreateBottomSheet = false
+                onNavigateToBlend()
             }
         )
     }
@@ -698,7 +1016,7 @@ fun LibraryScreen(
         )
     }
 
-    // Playlist Sync Modal (Follows precise visual specifications)
+    // Playlist Sync Modal
     if (showPlaylistSyncModal) {
         PlaylistSyncModal(
             visible = true,
@@ -708,11 +1026,40 @@ fun LibraryScreen(
                 onNavigateToPlaylist(plId)
             },
             onPlaylistCreated = { createdPlaylist ->
-                // Playlist created in Library: dismiss modal and navigate to the newly created playlist
                 showPlaylistSyncModal = false
                 onNavigateToPlaylist(createdPlaylist.id)
             },
             playerViewModel = playerViewModel
+        )
+    }
+}
+
+@Composable
+private fun LibrarySheetOptionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    iconTint: Color = Color(0xFFB3B3B3),
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = iconTint,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
         )
     }
 }
@@ -759,7 +1106,6 @@ fun PlaylistSyncCard(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Squircle icon with Headphonix logo
             Box(
                 modifier = Modifier
                     .size(46.dp)
@@ -813,7 +1159,7 @@ fun PlaylistSyncCard(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Import Spotify playlists to Headphonix",
+                    text = "Import playlists to Headphonix",
                     color = Color(0xFFA2B3A7),
                     fontSize = 12.sp,
                     maxLines = 1,
@@ -823,7 +1169,6 @@ fun PlaylistSyncCard(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Capsule "Sync" button
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
@@ -852,23 +1197,32 @@ fun PlaylistSyncCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryListRow(
     item: LibraryDisplayItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     val likedTracks by PlaylistRepository.likedTracks.collectAsState()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
-        // Artwork Box (60x60)
+        // Artwork Box (64x64 matching Spotify Android Library row height)
         Box(
             modifier = Modifier
-                .size(60.dp)
-                .clip(RoundedCornerShape(6.dp)),
+                .size(64.dp)
+                .clip(
+                    if (item is LibraryDisplayItem.ActionItem && item.isCircle) CircleShape
+                    else RoundedCornerShape(4.dp)
+                ),
             contentAlignment = Alignment.Center
         ) {
             when (item) {
@@ -938,7 +1292,7 @@ fun LibraryListRow(
                         Icon(
                             imageVector = item.iconVector,
                             contentDescription = item.title,
-                            tint = Color.White,
+                            tint = Color(0xFFB3B3B3),
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -946,58 +1300,69 @@ fun LibraryListRow(
             }
         }
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         // Title and Subtitle
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 item.title,
                 color = Color.White,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (item.isPinned) {
-                    Icon(
-                        Icons.Filled.PushPin,
-                        contentDescription = "Pinned",
-                        tint = GreenPrimary,
-                        modifier = Modifier.size(12.dp)
+            if (item.subtitle.isNotEmpty() || item.isPinned) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (item.isPinned) {
+                        Icon(
+                            Icons.Filled.PushPin,
+                            contentDescription = "Pinned",
+                            tint = GreenPrimary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        item.subtitle,
+                        color = Color(0xFFA7A7A7),
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                Text(
-                    item.subtitle,
-                    color = Color(0xFFAAAAAA),
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryGridCard(
     item: LibraryDisplayItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     val likedTracks by PlaylistRepository.likedTracks.collectAsState()
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         // Square Artwork
         Box(
             modifier = Modifier
                 .aspectRatio(1f)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(
+                    if (item is LibraryDisplayItem.ActionItem && item.isCircle) CircleShape
+                    else RoundedCornerShape(6.dp)
+                ),
             contentAlignment = Alignment.Center
         ) {
             when (item) {
@@ -1020,7 +1385,7 @@ fun LibraryGridCard(
                             Icons.Filled.Download,
                             contentDescription = "Downloaded",
                             tint = GreenPrimary,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(40.dp)
                         )
                     }
                 }
@@ -1067,8 +1432,8 @@ fun LibraryGridCard(
                         Icon(
                             imageVector = item.iconVector,
                             contentDescription = item.title,
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
+                            tint = Color(0xFFB3B3B3),
+                            modifier = Modifier.size(36.dp)
                         )
                     }
                 }
@@ -1080,29 +1445,31 @@ fun LibraryGridCard(
         Text(
             item.title,
             color = Color.White,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
             fontSize = 13.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (item.isPinned) {
-                Icon(
-                    Icons.Filled.PushPin,
-                    contentDescription = "Pinned",
-                    tint = GreenPrimary,
-                    modifier = Modifier.size(11.dp)
+        if (item.subtitle.isNotEmpty() || item.isPinned) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.isPinned) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = "Pinned",
+                        tint = GreenPrimary,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                }
+                Text(
+                    item.subtitle,
+                    color = Color(0xFFA7A7A7),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.width(3.dp))
             }
-            Text(
-                item.subtitle,
-                color = Color(0xFFAAAAAA),
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

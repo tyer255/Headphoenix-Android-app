@@ -11,6 +11,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.example.data.AppDownloadManager
 
+import android.content.Intent
+import com.example.service.PlayerManager
+
 class MainActivity : ComponentActivity() {
 
   private val requestNotificationPermissionLauncher =
@@ -22,6 +25,7 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     AppDownloadManager.initCompleted(applicationContext)
+    handleNotificationIntent(intent)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -34,5 +38,15 @@ class MainActivity : ComponentActivity() {
         MainScreen()
       }
     }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleNotificationIntent(intent)
+  }
+
+  private fun handleNotificationIntent(intent: Intent?) {
+    intent?.removeExtra("open_notification_card")
   }
 }

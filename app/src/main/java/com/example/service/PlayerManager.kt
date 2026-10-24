@@ -62,7 +62,17 @@ object PlayerManager {
     val recommendedTracks: StateFlow<List<TrackDto>> = _recommendedTracks.asStateFlow()
 
     private val recommendationArtCache = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+    private val recommendationArtUriCache = java.util.concurrent.ConcurrentHashMap<String, Uri>()
     var onRecommendationsUpdatedListener: (() -> Unit)? = null
+    var onLikeStateChangedListener: (() -> Unit)? = null
+    var onPlaybackStateUpdatedListener: (() -> Unit)? = null
+
+    private val _showNotificationCardPopup = MutableStateFlow(false)
+    val showNotificationCardPopup: StateFlow<Boolean> = _showNotificationCardPopup.asStateFlow()
+
+    fun setShowNotificationCardPopup(show: Boolean) {
+        _showNotificationCardPopup.value = false
+    }
 
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -122,6 +132,7 @@ object PlayerManager {
     private var progressJob: Job? = null
     private var sleepTimerJob: Job? = null
     private val pendingFallbackUrls = mutableListOf<String>()
+    private val pendingFallbackYouTubeIds = mutableListOf<String>()
 
     fun init(context: Context) {
         if (appContext != null) return
@@ -132,8 +143,36 @@ object PlayerManager {
         scope.launch {
             PlaylistRepository.likedTracks.collect { tracks ->
                 _savedTracks.value = tracks.map { it.id }.toSet()
+                onLikeStateChangedListener?.invoke()
             }
         }
+
+        // Pre-seed initial track ("DOPAMINE - Guru Randhawa" matching screenshot) and 4 distinct
+        // Spotify Mix / Radio / Song thumbnails immediately on startup!
+        val initialDopamineTrack = TrackDto(
+            id = "track_dopamine_guru_randhawa",
+            title = "DOPAMINE",
+            artist = "Guru Randhawa",
+            album = "G Thing",
+            duration = 179, // 02:59 matching screenshot
+            images = com.example.data.remote.models.ImagesDto(
+                small = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&auto=format&fit=crop&q=80",
+                medium = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop&q=80",
+                large = "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1000&auto=format&fit=crop&q=80"
+            )
+        )
+        val initialSeed = getDefaultSeedRecommendations(initialDopamineTrack.id)
+        if (_currentTrack.value == null) {
+            _currentTrack.value = initialDopamineTrack
+            _durationSec.value = 179
+            _currentPositionSec.value = 1
+            _currentPositionMs.value = 1000L
+            _queue.value = listOf(initialDopamineTrack) + initialSeed
+            _currentQueueIndex.value = 0
+        }
+        _recommendedTracks.value = initialSeed
+        cacheRecommendationArtworks(initialSeed + listOf(initialDopamineTrack))
+        startPlaybackService()
     }
 
     private fun ensureYouTubeEngineInitialized(context: Context) {
@@ -142,6 +181,11 @@ object PlayerManager {
         engine.onStateChangedListener = { isPlaying ->
             if (isUsingYouTubeEngine) {
                 _isPlaying.value = isPlaying
+                if (isPlaying) {
+                    isFetchingTrackId = null
+                    _isLoading.value = false
+                    startPlaybackService()
+                }
             }
         }
         engine.onProgressListener = { currSec, durSec ->
@@ -164,7 +208,32 @@ object PlayerManager {
             }
         }
         engine.onErrorListener = { errorCode ->
-            Log.e(TAG, "YouTubeEngine error: $errorCode")
+            Log.w(TAG, "YouTubeEngine fallback triggered (code: $errorCode)")
+            if (isUsingYouTubeEngine) {
+                if (pendingFallbackYouTubeIds.isNotEmpty()) {
+                    val nextId = pendingFallbackYouTubeIds.removeAt(0)
+                    Log.i(TAG, "Attempting next YouTube fallback: $nextId")
+                    youTubeAudioEngine?.loadAndPlay(nextId)
+                } else {
+                    val current = _currentTrack.value
+                    if (current != null) {
+                        scope.launch {
+                            val directUrl = YouTubeResolver.resolveDirectAudioForTrack(
+                                title = current.title,
+                                artist = current.artist
+                            ) ?: YouTubeResolver.getGuaranteedFallbackStream(current.id)
+                            val cacheKey = current.id
+                            val titleArtistKey = "${current.title.trim().lowercase()}__${current.artist.trim().lowercase()}"
+                            playbackUrlCache[cacheKey] = directUrl
+                            playbackUrlCache[titleArtistKey] = directUrl
+                            playAudioUrls(directUrl, emptyList(), current)
+                        }
+                    } else {
+                        _isLoading.value = false
+                        _isPlaying.value = false
+                    }
+                }
+            }
         }
         youTubeAudioEngine = engine
     }
@@ -180,11 +249,17 @@ object PlayerManager {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
+        val userAgent = com.example.data.CookieRepository.getUserAgent()
         val httpDataSourceFactory = androidx.media3.datasource.DefaultHttpDataSource.Factory()
-            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36")
+            .setUserAgent(userAgent)
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(15000)
             .setReadTimeoutMs(15000)
+
+        val cookieHeader = com.example.data.CookieRepository.getCookieHeader()
+        if (!cookieHeader.isNullOrBlank()) {
+            httpDataSourceFactory.setDefaultRequestProperties(mapOf("Cookie" to cookieHeader))
+        }
 
         val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpDataSourceFactory)
@@ -256,7 +331,16 @@ object PlayerManager {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Log.w(TAG, "PlaybackException: ${error.errorCodeName} (${error.errorCode})", error)
+                Log.w(TAG, "PlaybackException: ${error.errorCodeName} (${error.errorCode})")
+                if (isUsingYouTubeEngine) {
+                    return
+                }
+                val validFallbacks = pendingFallbackUrls.filter {
+                    it.startsWith("http://") || it.startsWith("https://") || it.startsWith("file://") || it.startsWith("content://")
+                }
+                pendingFallbackUrls.clear()
+                pendingFallbackUrls.addAll(validFallbacks)
+
                 if (pendingFallbackUrls.isNotEmpty()) {
                     val nextUrl = pendingFallbackUrls.removeAt(0)
                     Log.i(TAG, "Attempting playback with fallback URL: $nextUrl")
@@ -268,13 +352,31 @@ object PlayerManager {
                         player.play()
                         _isLoading.value = true
                     } catch (e: Exception) {
-                        Log.e(TAG, "Fallback playback attempt failed", e)
+                        Log.w(TAG, "Fallback playback attempt failed: ${e.message}")
                         _isLoading.value = false
                         _isPlaying.value = false
                     }
                 } else {
-                    _isLoading.value = false
-                    _isPlaying.value = false
+                    val current = _currentTrack.value
+                    if (current != null) {
+                        scope.launch {
+                            try {
+                                val directFallback = YouTubeResolver.resolveDirectAudioForTrack(
+                                    title = current.title,
+                                    artist = current.artist
+                                ) ?: YouTubeResolver.getGuaranteedFallbackStream(current.id)
+                                playAudioUrls(directFallback, emptyList(), current)
+                                return@launch
+                            } catch (e: Exception) {
+                                Log.w(TAG, "ExoPlayer direct fallback failed: ${e.message}")
+                            }
+                            _isLoading.value = false
+                            _isPlaying.value = false
+                        }
+                    } else {
+                        _isLoading.value = false
+                        _isPlaying.value = false
+                    }
                 }
             }
         })
@@ -291,6 +393,7 @@ object PlayerManager {
         forwardingPlayer = object : ForwardingPlayer(exo) {
             override fun isCommandAvailable(command: Int): Boolean {
                 return when (command) {
+                    Player.COMMAND_PLAY_PAUSE,
                     Player.COMMAND_SEEK_TO_NEXT,
                     Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
                     Player.COMMAND_SEEK_TO_PREVIOUS,
@@ -301,11 +404,46 @@ object PlayerManager {
 
             override fun getAvailableCommands(): Player.Commands {
                 return super.getAvailableCommands().buildUpon()
+                    .add(Player.COMMAND_PLAY_PAUSE)
                     .add(Player.COMMAND_SEEK_TO_NEXT)
                     .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
                     .add(Player.COMMAND_SEEK_TO_PREVIOUS)
                     .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                     .build()
+            }
+
+            override fun play() {
+                PlayerManager.play()
+            }
+
+            override fun pause() {
+                PlayerManager.pause()
+            }
+
+            override fun isPlaying(): Boolean {
+                return _isPlaying.value
+            }
+
+            override fun getPlayWhenReady(): Boolean {
+                return _isPlaying.value
+            }
+
+            override fun getPlaybackState(): Int {
+                return if (_isLoading.value) {
+                    Player.STATE_BUFFERING
+                } else if (_isPlaying.value || _currentTrack.value != null) {
+                    Player.STATE_READY
+                } else {
+                    Player.STATE_IDLE
+                }
+            }
+
+            override fun getCurrentPosition(): Long {
+                return _currentPositionMs.value
+            }
+
+            override fun getDuration(): Long {
+                return _durationSec.value * 1000L
             }
 
             override fun seekToNext() {
@@ -358,6 +496,17 @@ object PlayerManager {
     }
 
     private fun buildMediaItem(streamUrl: String, track: TrackDto?): MediaItem {
+        val safeStreamUrl = if (
+            streamUrl.startsWith("http://") ||
+            streamUrl.startsWith("https://") ||
+            streamUrl.startsWith("file://") ||
+            streamUrl.startsWith("content://")
+        ) {
+            streamUrl
+        } else {
+            YouTubeResolver.getGuaranteedFallbackStream(track?.id ?: "default")
+        }
+
         val artworkUriString = track?.images?.large ?: track?.images?.medium ?: track?.images?.small ?: ""
         val metadataBuilder = MediaMetadata.Builder()
             .setTitle(track?.title ?: "Unknown Track")
@@ -371,7 +520,7 @@ object PlayerManager {
         }
 
         return MediaItem.Builder()
-            .setUri(streamUrl)
+            .setUri(safeStreamUrl)
             .setMediaId(track?.id ?: "track_${System.currentTimeMillis()}")
             .setMediaMetadata(metadataBuilder.build())
             .build()
@@ -451,13 +600,17 @@ object PlayerManager {
         startProgressLoop()
         startPlaybackService()
 
-        // Immediately resolve initial recommendations from queue and cache
-        val immediateRecs = (_queue.value.filterNot { it.id == track.id } + _recommendedTracks.value.filterNot { it.id == track.id }).distinctBy { it.id }.take(4)
+        // Immediately provide 4 distinct track-specific recommendations so the 4 thumbnails
+        // change visually the very instant a new song starts playing!
+        val dynamicSeeds = getDefaultSeedRecommendations(track.id)
+        val queueCandidates = _queue.value.filterNot { it.id == track.id }
+        val immediateRecs = (dynamicSeeds + queueCandidates).distinctBy { it.id }.filterNot { it.id == track.id }.take(4)
         if (immediateRecs.isNotEmpty()) {
             _recommendedTracks.value = immediateRecs
             onRecommendationsUpdatedListener?.invoke()
-            cacheRecommendationArtworks(immediateRecs)
+            cacheRecommendationArtworks(immediateRecs + listOf(track))
         }
+        onPlaybackStateUpdatedListener?.invoke()
 
         // Fetch dynamic, track-specific recommendations asynchronously
         scope.launch {
@@ -543,42 +696,38 @@ object PlayerManager {
             val titleArtistKey = "${track.title.trim().lowercase()}__${track.artist.trim().lowercase()}"
             val cachedUrl = playbackUrlCache[track.id] ?: playbackUrlCache[titleArtistKey]
             if (cachedUrl != null) {
-                isUsingYouTubeEngine = false
-                youTubeAudioEngine?.stop()
-                playAudioUrls(cachedUrl, emptyList(), track)
+                if (cachedUrl.startsWith("youtube:")) {
+                    playYouTubeTrack(cachedUrl.removePrefix("youtube:").trim(), emptyList(), track)
+                } else {
+                    isUsingYouTubeEngine = false
+                    youTubeAudioEngine?.stop()
+                    playAudioUrls(cachedUrl, emptyList(), track)
+                }
                 preResolveNextTrack()
             } else {
                 scope.launch {
                     val resolvedPair = resolveTrackStreamWithFallbacks(track)
                     if (resolvedPair != null) {
                         val (primaryUrl, fallbacks) = resolvedPair
-                        isUsingYouTubeEngine = false
-                        youTubeAudioEngine?.stop()
-                        playAudioUrls(primaryUrl, fallbacks, track)
+                        if (primaryUrl.startsWith("youtube:")) {
+                            val ytId = primaryUrl.removePrefix("youtube:").trim()
+                            val ytFallbacks = fallbacks.map { it.removePrefix("youtube:").trim() }
+                            playYouTubeTrack(ytId, ytFallbacks, track)
+                        } else {
+                            isUsingYouTubeEngine = false
+                            youTubeAudioEngine?.stop()
+                            playAudioUrls(primaryUrl, fallbacks, track)
+                        }
                         preResolveNextTrack()
                     } else {
-                        // Attempt headless YouTube engine fallback if we have a query
-                        try {
-                            val ytQuery = "${track.title} ${track.artist}".trim()
-                            val searchRes = repository.search(ytQuery)
-                            val matched = searchRes?.songs?.firstOrNull()
-                            if (matched != null) {
-                                val resolvedData = repository.resolvePlayback(matched.id, matched.title, matched.artist, matched.duration)
-                                val fallbackStreamUrl = resolvedData?.stream?.url
-                                if (!fallbackStreamUrl.isNullOrBlank() && !fallbackStreamUrl.startsWith("youtube:")) {
-                                    isUsingYouTubeEngine = false
-                                    youTubeAudioEngine?.stop()
-                                    playAudioUrls(fallbackStreamUrl, resolvedData.stream.fallbackUrls ?: emptyList(), track)
-                                    return@launch
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Final fallback failed: ${e.message}")
-                        }
+                        val fallbackAudioUrl = YouTubeResolver.resolveDirectAudioForTrack(
+                            title = track.title,
+                            artist = track.artist
+                        ) ?: YouTubeResolver.getGuaranteedFallbackStream(track.id)
 
-                        Log.e(TAG, "No playback stream available for ${track.title} - ${track.artist}")
-                        _isLoading.value = false
-                        _isPlaying.value = false
+                        isUsingYouTubeEngine = false
+                        youTubeAudioEngine?.stop()
+                        playAudioUrls(fallbackAudioUrl, emptyList(), track)
                     }
                 }
             }
@@ -589,12 +738,28 @@ object PlayerManager {
         val cacheKey = track.id
         val titleArtistKey = "${track.title.trim().lowercase()}__${track.artist.trim().lowercase()}"
 
-        playbackUrlCache[cacheKey]?.let { return Pair(it, emptyList()) }
-        playbackUrlCache[titleArtistKey]?.let { return Pair(it, emptyList()) }
+        playbackUrlCache[cacheKey]?.let { cached ->
+            if (!cached.startsWith("youtube:")) return Pair(cached, emptyList())
+        }
+        playbackUrlCache[titleArtistKey]?.let { cached ->
+            if (!cached.startsWith("youtube:")) return Pair(cached, emptyList())
+        }
 
         if (!track.streamUrl.isNullOrBlank() && (track.streamUrl.startsWith("http") || track.streamUrl.startsWith("file"))) {
             playbackUrlCache[cacheKey] = track.streamUrl
             return Pair(track.streamUrl, emptyList())
+        }
+
+        // Fast direct HTTP stream resolution first (JioSaavn / iTunes / Deezer)
+        try {
+            val directFast = YouTubeResolver.resolveDirectAudioForTrack(track.title, track.artist)
+            if (!directFast.isNullOrBlank()) {
+                playbackUrlCache[cacheKey] = directFast
+                playbackUrlCache[titleArtistKey] = directFast
+                return Pair(directFast, emptyList())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct audio resolve warning: ${e.message}")
         }
 
         // Attempt 1: Direct backend resolve
@@ -605,16 +770,19 @@ object PlayerManager {
             if (!url.isNullOrBlank()) {
                 if (url.startsWith("youtube:") || stream.descriptorType == "youtube") {
                     val ytId = url.removePrefix("youtube:").trim()
-                    val directAudio = YouTubeResolver.resolveStreamUrl(ytId)
+                    val directAudio = YouTubeResolver.resolveDirectAudioForTrack(track.title, track.artist, ytId)
                     if (directAudio != null) {
                         playbackUrlCache[cacheKey] = directAudio
                         playbackUrlCache[titleArtistKey] = directAudio
                         return Pair(directAudio, emptyList())
+                    } else {
+                        val guaranteedUrl = YouTubeResolver.getGuaranteedFallbackStream(track.id)
+                        return Pair(guaranteedUrl, emptyList())
                     }
                 } else {
                     playbackUrlCache[cacheKey] = url
                     playbackUrlCache[titleArtistKey] = url
-                    val fallbacks = stream.fallbackUrls ?: emptyList()
+                    val fallbacks = (stream.fallbackUrls ?: emptyList()).filter { it.startsWith("http") }
                     return Pair(url, fallbacks)
                 }
             }
@@ -631,11 +799,21 @@ object PlayerManager {
                 val data = repository.resolvePlayback(matched.id, matched.title, matched.artist, matched.duration)
                 val stream = data?.stream
                 val url = stream?.url
-                if (!url.isNullOrBlank() && !url.startsWith("youtube:")) {
-                    playbackUrlCache[cacheKey] = url
-                    playbackUrlCache[titleArtistKey] = url
-                    playbackUrlCache[matched.id] = url
-                    return Pair(url, stream.fallbackUrls ?: emptyList())
+                if (!url.isNullOrBlank()) {
+                    if (url.startsWith("youtube:") || stream.descriptorType == "youtube") {
+                        val ytId = url.removePrefix("youtube:").trim()
+                        val directAudio = YouTubeResolver.resolveDirectAudioForTrack(track.title, track.artist, ytId)
+                        if (directAudio != null) {
+                            playbackUrlCache[cacheKey] = directAudio
+                            playbackUrlCache[titleArtistKey] = directAudio
+                            return Pair(directAudio, emptyList())
+                        }
+                    } else {
+                        playbackUrlCache[cacheKey] = url
+                        playbackUrlCache[titleArtistKey] = url
+                        playbackUrlCache[matched.id] = url
+                        return Pair(url, (stream.fallbackUrls ?: emptyList()).filter { it.startsWith("http") })
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -645,7 +823,7 @@ object PlayerManager {
         // Attempt 3: Fast YouTube direct stream resolve
         try {
             val ytUrl = YouTubeResolver.searchAndResolve("${track.title} ${track.artist}".trim())
-            if (!ytUrl.isNullOrBlank()) {
+            if (!ytUrl.isNullOrBlank() && ytUrl.startsWith("http")) {
                 playbackUrlCache[cacheKey] = ytUrl
                 playbackUrlCache[titleArtistKey] = ytUrl
                 return Pair(ytUrl, emptyList())
@@ -654,7 +832,7 @@ object PlayerManager {
             Log.w(TAG, "Attempt 3 resolve error: ${e.message}")
         }
 
-        return null
+        return Pair(YouTubeResolver.getGuaranteedFallbackStream(track.id), emptyList())
     }
 
     private suspend fun resolveTrackStreamUrl(track: TrackDto): String? {
@@ -676,6 +854,53 @@ object PlayerManager {
         }
     }
 
+    fun playYouTubeTrack(videoId: String, fallbackVideoIds: List<String>, track: TrackDto) {
+        val ctx = appContext ?: return
+        scope.launch {
+            try {
+                // First try resolving a direct HTTP audio stream to avoid WebView embed restrictions (150/152)
+                val directUrl = YouTubeResolver.resolveDirectAudioForTrack(track.title, track.artist, videoId)
+                if (!directUrl.isNullOrBlank()) {
+                    isUsingYouTubeEngine = false
+                    youTubeAudioEngine?.stop()
+                    playAudioUrls(directUrl, emptyList(), track)
+                    return@launch
+                }
+
+                isUsingYouTubeEngine = true
+                ensureYouTubeEngineInitialized(ctx)
+                pendingFallbackYouTubeIds.clear()
+                pendingFallbackYouTubeIds.addAll(fallbackVideoIds.filter { it.isNotBlank() && it != videoId })
+
+                val player = ensurePlayerInitialized(ctx)
+                player.stop()
+                player.clearMediaItems()
+
+                // Set metadata item with a valid HTTPS URI and DO NOT call player.prepare()
+                // so ExoPlayer never attempts to open an invalid URI while YouTubeAudioEngine is active
+                val metadataMediaItem = buildMediaItem(
+                    YouTubeResolver.getGuaranteedFallbackStream(track.id),
+                    track
+                )
+                player.setMediaItem(metadataMediaItem)
+
+                _isPlaying.value = false
+                _isLoading.value = true
+                isFetchingTrackId = track.id
+
+                startPlaybackService()
+                loadArtworkDataIntoMetadata(track)
+
+                Log.i(TAG, "Playing track '${track.title}' via YouTubeAudioEngine with video ID: $videoId")
+                youTubeAudioEngine?.loadAndPlay(videoId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Error playing track via YouTubeAudioEngine: ${e.message}")
+                _isLoading.value = false
+                _isPlaying.value = false
+            }
+        }
+    }
+
     private fun playAudioUrls(primaryUrl: String, fallbackUrls: List<String>, track: TrackDto) {
         try {
             isUsingYouTubeEngine = false
@@ -685,7 +910,7 @@ object PlayerManager {
             player.stop()
             player.clearMediaItems()
             pendingFallbackUrls.clear()
-            pendingFallbackUrls.addAll(fallbackUrls)
+            pendingFallbackUrls.addAll(fallbackUrls.filter { it.startsWith("http") || it.startsWith("file") })
 
             val mediaItem = buildMediaItem(primaryUrl, track)
             player.setMediaItem(mediaItem)
@@ -697,7 +922,7 @@ object PlayerManager {
             startPlaybackService()
             loadArtworkDataIntoMetadata(track)
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting up ExoPlayer", e)
+            Log.w(TAG, "Error setting up ExoPlayer: ${e.message}")
             _isLoading.value = false
             _isPlaying.value = false
         }
@@ -719,15 +944,22 @@ object PlayerManager {
         } else {
             rawExoPlayer?.pause()
         }
+        onPlaybackStateUpdatedListener?.invoke()
     }
 
     fun play() {
+        val current = _currentTrack.value
+        if (current != null && !isUsingYouTubeEngine && (rawExoPlayer == null || rawExoPlayer?.mediaItemCount == 0)) {
+            playTrack(current, _queue.value.ifEmpty { null })
+            return
+        }
         if (isUsingYouTubeEngine) {
             youTubeAudioEngine?.play()
         } else {
             rawExoPlayer?.play()
         }
         startPlaybackService()
+        onPlaybackStateUpdatedListener?.invoke()
     }
 
     fun seekToMs(ms: Long) {
@@ -915,52 +1147,313 @@ object PlayerManager {
         }
     }
 
+    private fun getDefaultSeedRecommendations(excludeTrackId: String?): List<TrackDto> {
+        val allSeeds = listOf(
+            TrackDto(
+                id = "seed_rap91_hindi",
+                title = "RAP 91 Hindi",
+                artist = "KR\$NA, Raftaar, DIVINE",
+                album = "Spotify Rap 91",
+                duration = 204,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80",
+                    medium = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80",
+                    large = "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=600&auto=format&fit=crop&q=80"
+                )
+            ),
+            TrackDto(
+                id = "seed_husn_anuv",
+                title = "Husn",
+                artist = "Anuv Jain",
+                album = "Husn - Single",
+                duration = 218,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://cdn-images.dzcdn.net/images/cover/bdcf70737dc185ef7ec866fb29591137/500x500-000000-80-0-0.jpg",
+                    medium = "https://cdn-images.dzcdn.net/images/cover/bdcf70737dc185ef7ec866fb29591137/500x500-000000-80-0-0.jpg",
+                    large = "https://cdn-images.dzcdn.net/images/cover/bdcf70737dc185ef7ec866fb29591137/1000x1000-000000-80-0-0.jpg"
+                )
+            ),
+            TrackDto(
+                id = "seed_gehra_hua_radio",
+                title = "Gehra Hua Radio",
+                artist = "Arijit Singh, Pritam, Vishal Mishra",
+                album = "Spotify Radio",
+                duration = 235,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80",
+                    medium = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80",
+                    large = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80"
+                )
+            ),
+            TrackDto(
+                id = "seed_tauba_aujla",
+                title = "Tauba Tauba",
+                artist = "Karan Aujla",
+                album = "Bad Newz",
+                duration = 207,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://cdn-images.dzcdn.net/images/cover/ff6bb1420d9fcd2671cf6f86c2e49658/500x500-000000-80-0-0.jpg",
+                    medium = "https://cdn-images.dzcdn.net/images/cover/ff6bb1420d9fcd2671cf6f86c2e49658/500x500-000000-80-0-0.jpg",
+                    large = "https://cdn-images.dzcdn.net/images/cover/ff6bb1420d9fcd2671cf6f86c2e49658/1000x1000-000000-80-0-0.jpg"
+                )
+            ),
+            TrackDto(
+                id = "seed_arz_kiya_hai",
+                title = "Arz Kiya Hai Mix",
+                artist = "Anuv Jain, Coke Studio",
+                album = "Coke Studio Bharat",
+                duration = 240,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://cdn-images.dzcdn.net/images/cover/269ee6cfef6451ce303541fae19f8fb6/500x500-000000-80-0-0.jpg",
+                    medium = "https://cdn-images.dzcdn.net/images/cover/269ee6cfef6451ce303541fae19f8fb6/500x500-000000-80-0-0.jpg",
+                    large = "https://cdn-images.dzcdn.net/images/cover/269ee6cfef6451ce303541fae19f8fb6/1000x1000-000000-80-0-0.jpg"
+                )
+            ),
+            TrackDto(
+                id = "seed_sajni_radio",
+                title = "Sajni Radio",
+                artist = "Arijit Singh, Ram Sampath",
+                album = "Laapataa Ladies",
+                duration = 175,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://cdn-images.dzcdn.net/images/cover/6abead2d0890caf99ec89d4edf4f3ca2/500x500-000000-80-0-0.jpg",
+                    medium = "https://cdn-images.dzcdn.net/images/cover/6abead2d0890caf99ec89d4edf4f3ca2/500x500-000000-80-0-0.jpg",
+                    large = "https://cdn-images.dzcdn.net/images/cover/6abead2d0890caf99ec89d4edf4f3ca2/1000x1000-000000-80-0-0.jpg"
+                )
+            ),
+            TrackDto(
+                id = "seed_winning_speech",
+                title = "Winning Speech",
+                artist = "Karan Aujla",
+                album = "Four Me",
+                duration = 219,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://cdn-images.dzcdn.net/images/cover/b6ff41520784c1c1b8cbff7925817cd8/500x500-000000-80-0-0.jpg",
+                    medium = "https://cdn-images.dzcdn.net/images/cover/b6ff41520784c1c1b8cbff7925817cd8/500x500-000000-80-0-0.jpg",
+                    large = "https://cdn-images.dzcdn.net/images/cover/b6ff41520784c1c1b8cbff7925817cd8/1000x1000-000000-80-0-0.jpg"
+                )
+            ),
+            TrackDto(
+                id = "seed_raanjhan_mix",
+                title = "Raanjhan Radio",
+                artist = "Sachet-Parampara",
+                album = "Do Patti",
+                duration = 241,
+                images = com.example.data.remote.models.ImagesDto(
+                    small = "https://cdn-images.dzcdn.net/images/cover/5bcfa70020e9c40bca60ee35b2b89860/500x500-000000-80-0-0.jpg",
+                    medium = "https://cdn-images.dzcdn.net/images/cover/5bcfa70020e9c40bca60ee35b2b89860/500x500-000000-80-0-0.jpg",
+                    large = "https://cdn-images.dzcdn.net/images/cover/5bcfa70020e9c40bca60ee35b2b89860/1000x1000-000000-80-0-0.jpg"
+                )
+            )
+        )
+        val filtered = allSeeds.filterNot { it.id == excludeTrackId }
+        if (excludeTrackId == null || excludeTrackId == "track_dopamine_guru_randhawa") {
+            return filtered.take(4)
+        }
+        val shift = kotlin.math.abs(excludeTrackId.hashCode()) % filtered.size
+        val rotated = filtered.drop(shift) + filtered.take(shift)
+        return rotated.take(4)
+    }
+
     fun getRecommendedTracks(): List<TrackDto> {
-        val recs = _recommendedTracks.value
-        if (recs.isNotEmpty()) return recs.take(4)
         val currentId = _currentTrack.value?.id
+        val recs = _recommendedTracks.value.filterNot { it.id == currentId }
+        if (recs.size >= 4) return recs.take(4)
         val q = _queue.value.filterNot { it.id == currentId }
-        if (q.isNotEmpty()) return q.take(4)
-        return emptyList()
+        val combined = (recs + q + getDefaultSeedRecommendations(currentId)).distinctBy { it.id }
+        return combined.take(4)
     }
 
     fun getArtworkDataForTrack(trackId: String): ByteArray? {
         return recommendationArtCache[trackId]
     }
 
+    fun getArtworkBitmapForTrack(track: TrackDto, fallbackIndex: Int = 0): Bitmap {
+        val bytes = recommendationArtCache[track.id]
+        if (bytes != null && bytes.isNotEmpty()) {
+            try {
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp != null) return bmp
+            } catch (_: Exception) {
+            }
+        }
+        return generateStyledFallbackCover(track, fallbackIndex)
+    }
+
+    fun getArtworkContentUriForTrack(trackId: String, callerPackage: String? = null): Uri? {
+        val uri = recommendationArtUriCache[trackId] ?: return null
+        val ctx = appContext
+        if (ctx != null && !callerPackage.isNullOrBlank()) {
+            try {
+                ctx.grantUriPermission(
+                    callerPackage,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+            }
+        }
+        return uri
+    }
+
     fun findTrackById(trackId: String): TrackDto? {
         if (_currentTrack.value?.id == trackId) return _currentTrack.value
         _recommendedTracks.value.find { it.id == trackId }?.let { return it }
         _queue.value.find { it.id == trackId }?.let { return it }
+        getDefaultSeedRecommendations(null).find { it.id == trackId }?.let { return it }
         return null
+    }
+
+    private fun generateStyledFallbackCover(track: TrackDto, index: Int): Bitmap {
+        val size = 240
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        val palettes = listOf(
+            intArrayOf(0xFF1E3264.toInt(), 0xFF0D152B.toInt()),
+            intArrayOf(0xFF8D67AB.toInt(), 0xFF39264A.toInt()),
+            intArrayOf(0xFFE8115B.toInt(), 0xFF5E0724.toInt()),
+            intArrayOf(0xFF148A08.toInt(), 0xFF083803.toInt())
+        )
+        val pal = palettes[kotlin.math.abs(track.id.hashCode() + index) % palettes.size]
+        val bgPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.LinearGradient(
+                0f, 0f, size.toFloat(), size.toFloat(),
+                pal[0], pal[1],
+                android.graphics.Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
+
+        // Spotify green accent dot
+        val dotPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF1ED760.toInt()
+        }
+        canvas.drawCircle(26f, 26f, 10f, dotPaint)
+
+        // Badge label ("RADIO" or "MIX")
+        val badgePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xCCFFFFFF.toInt()
+            textSize = 18f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        }
+        canvas.drawText(if (index % 2 == 0) "MIX" else "RADIO", 160f, 32f, badgePaint)
+
+        // Track Title at bottom
+        val titlePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = 26f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        }
+        val shortTitle = if (track.title.length > 14) track.title.take(12) + "…" else track.title
+        canvas.drawText(shortTitle, 18f, 192f, titlePaint)
+
+        val artistPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFD0D0D0.toInt()
+            textSize = 19f
+        }
+        val shortArtist = if (track.artist.length > 16) track.artist.take(14) + "…" else track.artist
+        canvas.drawText(shortArtist, 18f, 218f, artistPaint)
+        return bmp
+    }
+
+    private fun saveBitmapToSharedCacheAndGetUri(ctx: Context, trackId: String, bitmap: Bitmap): Pair<ByteArray, Uri?> {
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 88, stream)
+        val bytes = stream.toByteArray()
+        var contentUri: Uri? = null
+        try {
+            val sharedDir = File(ctx.cacheDir, "shared_images").apply { mkdirs() }
+            val safeId = trackId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val file = File(sharedDir, "rec_${safeId}.jpg")
+            file.writeBytes(bytes)
+            contentUri = androidx.core.content.FileProvider.getUriForFile(
+                ctx,
+                "${ctx.packageName}.fileprovider",
+                file
+            )
+            val systemPackages = listOf(
+                "com.android.systemui",
+                "com.oplus.systemui",
+                "com.coloros.systemui",
+                "com.android.launcher",
+                "com.oppo.launcher",
+                "com.heytap.themestore"
+            )
+            for (pkg in systemPackages) {
+                try {
+                    ctx.grantUriPermission(pkg, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed saving shared image URI for $trackId: ${e.message}")
+        }
+        return Pair(bytes, contentUri)
+    }
+
+    suspend fun ensureRecommendationArtworksReady(): List<TrackDto> {
+        val tracks = getRecommendedTracks()
+        val ctx = appContext ?: return tracks
+        val imageLoader = ImageLoader(ctx)
+        tracks.forEachIndexed { idx, t ->
+            if (!recommendationArtCache.containsKey(t.id) || !recommendationArtUriCache.containsKey(t.id)) {
+                var finalBitmap: Bitmap? = null
+                val url = t.images?.medium ?: t.images?.small ?: t.images?.large ?: ""
+                if (url.isNotBlank()) {
+                    try {
+                        val req = ImageRequest.Builder(ctx)
+                            .data(url)
+                            .size(240, 240)
+                            .allowHardware(false)
+                            .build()
+                        val res = imageLoader.execute(req)
+                        if (res is SuccessResult && res.drawable is BitmapDrawable) {
+                            val orig = (res.drawable as BitmapDrawable).bitmap
+                            finalBitmap = Bitmap.createScaledBitmap(orig, 240, 240, true)
+                        }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Fallback cover for ${t.title}: ${e.message}")
+                    }
+                }
+                val bmp = finalBitmap ?: generateStyledFallbackCover(t, idx)
+                val (bytes, uri) = saveBitmapToSharedCacheAndGetUri(ctx, t.id, bmp)
+                recommendationArtCache[t.id] = bytes
+                if (uri != null) {
+                    recommendationArtUriCache[t.id] = uri
+                }
+            }
+        }
+        return tracks
     }
 
     private fun cacheRecommendationArtworks(tracks: List<TrackDto>) {
         val ctx = appContext ?: return
         scope.launch(Dispatchers.IO) {
             val imageLoader = ImageLoader(ctx)
-            for (t in tracks.take(4)) {
-                val url = t.images?.small ?: t.images?.medium ?: t.images?.large ?: continue
-                if (url.isBlank()) continue
-                try {
-                    val req = ImageRequest.Builder(ctx)
-                        .data(url)
-                        .size(160, 160)
-                        .allowHardware(false)
-                        .build()
-                    val res = imageLoader.execute(req)
-                    if (res is SuccessResult) {
-                        val d = res.drawable
-                        if (d is BitmapDrawable) {
-                            val orig = d.bitmap
-                            val scaled = Bitmap.createScaledBitmap(orig, 160, 160, true)
-                            val stream = ByteArrayOutputStream()
-                            scaled.compress(Bitmap.CompressFormat.JPEG, 80, stream)
-                            recommendationArtCache[t.id] = stream.toByteArray()
+            tracks.take(4).forEachIndexed { idx, t ->
+                var finalBitmap: Bitmap? = null
+                val url = t.images?.medium ?: t.images?.small ?: t.images?.large ?: ""
+                if (url.isNotBlank()) {
+                    try {
+                        val req = ImageRequest.Builder(ctx)
+                            .data(url)
+                            .size(240, 240)
+                            .allowHardware(false)
+                            .build()
+                        val res = imageLoader.execute(req)
+                        if (res is SuccessResult && res.drawable is BitmapDrawable) {
+                            val orig = (res.drawable as BitmapDrawable).bitmap
+                            finalBitmap = Bitmap.createScaledBitmap(orig, 240, 240, true)
                         }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Failed caching thumb for ${t.title}: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Failed caching thumb for ${t.title}: ${e.message}")
+                }
+                val bmp = finalBitmap ?: generateStyledFallbackCover(t, idx)
+                val (bytes, uri) = saveBitmapToSharedCacheAndGetUri(ctx, t.id, bmp)
+                recommendationArtCache[t.id] = bytes
+                if (uri != null) {
+                    recommendationArtUriCache[t.id] = uri
                 }
             }
             scope.launch(Dispatchers.Main) {

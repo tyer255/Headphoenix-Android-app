@@ -39,7 +39,7 @@ fun QueueSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1E1E1E)
+        containerColor = Color(0xFF181818)
     ) {
         Column(
             modifier = Modifier
@@ -61,7 +61,7 @@ fun QueueSheet(
                 )
                 if (queue.size > 1) {
                     TextButton(onClick = { playerViewModel.clearQueue() }) {
-                        Text("Clear Queue", color = Color.LightGray, fontSize = 13.sp)
+                        Text("Clear Queue", color = Color(0xFFB3B3B3), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -72,7 +72,7 @@ fun QueueSheet(
             Text(
                 "Now Playing",
                 style = MaterialTheme.typography.labelLarge,
-                color = GreenPrimary,
+                color = Color(0xFF1ED760),
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -83,7 +83,7 @@ fun QueueSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x221DB954))
+                        .background(Color(0xFF282828))
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -97,22 +97,23 @@ fun QueueSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             current.title,
-                            color = GreenPrimary,
+                            color = Color(0xFF1ED760),
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             current.artist ?: "Unknown Artist",
-                            color = Color.LightGray,
+                            color = Color(0xFFB3B3B3),
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (isPlaying) {
-                        Icon(Icons.Filled.VolumeUp, contentDescription = "Playing", tint = GreenPrimary, modifier = Modifier.size(22.dp))
-                    }
+                    com.example.ui.SpotifyEqualizerIcon(
+                        isPlaying = isPlaying,
+                        color = Color(0xFF1ED760)
+                    )
                 }
             } else {
                 Text("Nothing playing right now", color = Color.Gray, fontSize = 14.sp)

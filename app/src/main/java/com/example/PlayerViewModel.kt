@@ -33,6 +33,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val currentCanvasUrl: StateFlow<String?> = PlayerManager.currentCanvasUrl
     val currentLyrics: StateFlow<LyricsDto?> = PlayerManager.currentLyrics
     val recommendedTracks: StateFlow<List<TrackDto>> = PlayerManager.recommendedTracks
+    val showNotificationCardPopup: StateFlow<Boolean> = PlayerManager.showNotificationCardPopup
+
+    fun setShowNotificationCardPopup(show: Boolean) {
+        PlayerManager.setShowNotificationCardPopup(show)
+    }
 
     fun playTrack(track: TrackDto, newQueue: List<TrackDto>? = null) {
         PlayerManager.playTrack(track, newQueue)

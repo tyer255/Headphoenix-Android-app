@@ -32,7 +32,8 @@ fun CreateBottomSheet(
     onDismissRequest: () -> Unit,
     onCreatePlaylistClick: () -> Unit,
     onPlaylistSyncClick: () -> Unit = {},
-    onExtractPlaylistClick: () -> Unit = onPlaylistSyncClick
+    onExtractPlaylistClick: () -> Unit = onPlaylistSyncClick,
+    onBlendClick: () -> Unit = onCreatePlaylistClick
 ) {
     // This perfectly mirrors the CreateActionMenu.tsx from the web app
     Dialog(
@@ -81,7 +82,7 @@ fun CreateBottomSheet(
                 ActionMenuItem(
                     icon = { SyncBrandLogo(size = 22.dp, tint = Color(0xFF1ED760)) },
                     title = "Playlist Sync",
-                    subtitle = "Import tracks from Spotify into Headphonix",
+                    subtitle = "Import tracks into Headphonix",
                     onClick = { 
                         onDismissRequest()
                         onPlaylistSyncClick()
@@ -94,7 +95,7 @@ fun CreateBottomSheet(
                     subtitle = "Create a playlist together with friends",
                     onClick = { 
                         onDismissRequest()
-                        onCreatePlaylistClick() // Same action for now, type can be handled later
+                        onCreatePlaylistClick()
                     }
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -109,7 +110,7 @@ fun CreateBottomSheet(
                     subtitle = "Combine your friends' tastes into a playlist",
                     onClick = { 
                         onDismissRequest()
-                        // Blend flow
+                        onBlendClick()
                     }
                 )
             }
